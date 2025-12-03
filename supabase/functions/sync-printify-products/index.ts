@@ -60,7 +60,11 @@ Deno.serve(async (req: Request) => {
     const printifyProducts = await printifyResponse.json();
     const syncedProducts = [];
 
+    console.log(`📦 Found ${printifyProducts.data?.length || 0} products from Printify`);
+
     for (const product of printifyProducts.data || []) {
+      console.log(`\n🔄 Processing Printify product: ${product.id}`);
+
       const detailResponse = await fetch(
         `https://api.printify.com/v1/shops/${printifyShopId}/products/${product.id}.json`,
         {
@@ -71,12 +75,22 @@ Deno.serve(async (req: Request) => {
         }
       );
 
-      if (!detailResponse.ok) continue;
+      if (!detailResponse.ok) {
+        console.error(`❌ Failed to fetch details for product ${product.id}`);
+        continue;
+      }
 
       const details = await detailResponse.json();
+      console.log(`   Title: ${details.title}`);
 
       const thumbnail = details.images?.[0]?.src || '';
+      const images = details.images?.map((img: any) => img.src) || [];
       const priceInCents = details.variants?.[0]?.price ? Math.round(details.variants[0].price * 100) : 2999;
+
+      const slug = details.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
 
       const { data: existingProduct } = await supabase
         .from('products')
@@ -84,31 +98,46 @@ Deno.serve(async (req: Request) => {
         .eq('printify_id', product.id)
         .maybeSingle();
 
+      let currentProductId: string;
+
       if (existingProduct) {
+        console.log(`   ✏️  Updating existing product: ${existingProduct.id}`);
+
         const { error: updateError } = await supabase
           .from('products')
           .update({
             name: details.title,
+            slug: slug,
             description: details.description || '',
             price_cents: priceInCents,
             thumbnail_url: thumbnail,
+            images: images,
             active: details.visible,
             updated_at: new Date().toISOString(),
           })
           .eq('printify_id', product.id);
 
-        if (!updateError) {
+        if (updateError) {
+          console.error(`   ❌ Update error:`, updateError);
+        } else {
+          console.log(`   ✅ Updated successfully`);
           syncedProducts.push({ id: existingProduct.id, action: 'updated', printify_id: product.id });
         }
+
+        currentProductId = existingProduct.id;
       } else {
+        console.log(`   ➕ Creating new product`);
+
         const { data: newProduct, error: insertError } = await supabase
           .from('products')
           .insert({
             printify_id: product.id,
             name: details.title,
+            slug: slug,
             description: details.description || '',
             price_cents: priceInCents,
             thumbnail_url: thumbnail,
+            images: images,
             active: details.visible,
             featured: false,
             category: 'merch',
@@ -116,12 +145,24 @@ Deno.serve(async (req: Request) => {
           .select()
           .single();
 
-        if (!insertError && newProduct) {
-          syncedProducts.push({ id: newProduct.id, action: 'created', printify_id: product.id });
+        if (insertError) {
+          console.error(`   ❌ Insert error:`, insertError);
+          continue;
         }
+
+        if (!newProduct) {
+          console.error(`   ❌ No product returned after insert`);
+          continue;
+        }
+
+        console.log(`   ✅ Created successfully: ${newProduct.id}`);
+        syncedProducts.push({ id: newProduct.id, action: 'created', printify_id: product.id });
+        currentProductId = newProduct.id;
       }
 
       if (details.variants && details.variants.length > 0) {
+        console.log(`   🎨 Processing ${details.variants.length} variants`);
+
         for (const variant of details.variants) {
           const { data: existingVariant } = await supabase
             .from('variants')
@@ -130,7 +171,7 @@ Deno.serve(async (req: Request) => {
             .maybeSingle();
 
           const variantData = {
-            product_id: existingProduct?.id,
+            product_id: currentProductId,
             printify_variant_id: variant.id.toString(),
             name: variant.title || 'Default',
             price_cents: Math.round(variant.price * 100),
@@ -138,16 +179,30 @@ Deno.serve(async (req: Request) => {
           };
 
           if (existingVariant) {
-            await supabase
+            const { error: variantUpdateError } = await supabase
               .from('variants')
               .update(variantData)
               .eq('printify_variant_id', variant.id.toString());
-          } else if (existingProduct) {
-            await supabase.from('variants').insert(variantData);
+
+            if (variantUpdateError) {
+              console.error(`      ❌ Variant update error:`, variantUpdateError);
+            }
+          } else {
+            const { error: variantInsertError } = await supabase
+              .from('variants')
+              .insert(variantData);
+
+            if (variantInsertError) {
+              console.error(`      ❌ Variant insert error:`, variantInsertError);
+            } else {
+              console.log(`      ✅ Created variant: ${variant.title}`);
+            }
           }
         }
       }
     }
+
+    console.log(`\n✅ Sync complete! Processed ${syncedProducts.length} products`);
 
     return new Response(
       JSON.stringify({
