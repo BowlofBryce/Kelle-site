@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Heart, Mail } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export function Footer() {
   return (
@@ -28,6 +29,11 @@ export function Footer() {
                 Return Policy
               </li>
               <li className="hover:text-pink-400 cursor-pointer transition-colors">Contact</li>
+              <li>
+                <Link to="/velveth0ll0w-4dm1n/dashboard" className="hover:text-pink-400 transition-colors">
+                  Admin
+                </Link>
+              </li>
             </ul>
           </div>
 

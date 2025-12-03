@@ -10,7 +10,6 @@ import {
   LogOut,
   Plus,
 } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { AnimatedButton } from '../components/ui/AnimatedButton';
 import { fadeInUp } from '../lib/animations';
@@ -20,7 +19,6 @@ type Product = Database['public']['Tables']['products']['Row'];
 type Order = Database['public']['Tables']['orders']['Row'];
 
 export function AdminDashboard() {
-  const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'content'>(
     'overview'
@@ -31,23 +29,8 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      if (!user) {
-        navigate('/velveth0ll0w-4dm1n');
-        return;
-      }
-
-      const admin = await isAdmin();
-      if (!admin) {
-        navigate('/');
-        return;
-      }
-
-      fetchData();
-    };
-
-    checkAuth();
-  }, [user, navigate, isAdmin]);
+    fetchData();
+  }, []);
 
   const fetchData = async () => {
     setLoading(true);
@@ -70,7 +53,6 @@ export function AdminDashboard() {
   };
 
   const handleSignOut = async () => {
-    await signOut();
     navigate('/');
   };
 
