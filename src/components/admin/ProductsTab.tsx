@@ -11,6 +11,7 @@ import {
   Save,
   X,
   Upload,
+  Package,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { AnimatedButton } from '../ui/AnimatedButton';
