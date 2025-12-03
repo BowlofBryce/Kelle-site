@@ -6,14 +6,15 @@ import {
   Package,
   ShoppingBag,
   FileText,
-  BarChart3,
   LogOut,
-  Plus,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { AnimatedButton } from '../components/ui/AnimatedButton';
 import { fadeInUp } from '../lib/animations';
 import type { Database } from '../lib/database.types';
+import { ProductsTab } from '../components/admin/ProductsTab';
+import { OrdersTab } from '../components/admin/OrdersTab';
+import { ContentTab } from '../components/admin/ContentTab';
+import { OverviewTab } from '../components/admin/OverviewTab';
 
 type Product = Database['public']['Tables']['products']['Row'];
 type Order = Database['public']['Tables']['orders']['Row'];
@@ -122,9 +123,9 @@ export function AdminDashboard() {
               </div>
             ) : (
               <>
-                {activeTab === 'overview' && <OverviewTab stats={stats} />}
+                {activeTab === 'overview' && <OverviewTab stats={stats} onRefresh={fetchData} />}
                 {activeTab === 'products' && <ProductsTab products={products} onRefresh={fetchData} />}
-                {activeTab === 'orders' && <OrdersTab orders={orders} />}
+                {activeTab === 'orders' && <OrdersTab orders={orders} onRefresh={fetchData} />}
                 {activeTab === 'content' && <ContentTab />}
               </>
             )}
@@ -163,173 +164,3 @@ function TabButton({
   );
 }
 
-function OverviewTab({ stats }: { stats: { totalRevenue: number; totalOrders: number; totalProducts: number } }) {
-  return (
-    <motion.div variants={fadeInUp} initial="hidden" animate="visible" className="space-y-6">
-      <h2 className="text-3xl font-bold text-pink-400">Overview</h2>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard
-          icon={<BarChart3 className="w-8 h-8" />}
-          label="Total Revenue"
-          value={`$${(stats.totalRevenue / 100).toFixed(2)}`}
-          color="pink"
-        />
-        <StatCard
-          icon={<ShoppingBag className="w-8 h-8" />}
-          label="Total Orders"
-          value={stats.totalOrders.toString()}
-          color="purple"
-        />
-        <StatCard
-          icon={<Package className="w-8 h-8" />}
-          label="Total Products"
-          value={stats.totalProducts.toString()}
-          color="cyan"
-        />
-      </div>
-
-      <div className="bg-black/60 border-2 border-pink-500/40 rounded-lg p-6">
-        <h3 className="text-xl font-bold text-gray-200 mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <AnimatedButton variant="primary" className="w-full">
-            <Plus className="w-5 h-5 inline mr-2" />
-            Add New Product
-          </AnimatedButton>
-          <AnimatedButton variant="secondary" className="w-full">
-            View Analytics
-          </AnimatedButton>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  color: 'pink' | 'purple' | 'cyan';
-}) {
-  const colorClasses = {
-    pink: 'text-pink-500 border-pink-500/40 shadow-[0_0_30px_rgba(255,0,150,0.2)]',
-    purple: 'text-purple-500 border-purple-500/40 shadow-[0_0_30px_rgba(168,85,247,0.2)]',
-    cyan: 'text-cyan-500 border-cyan-500/40 shadow-[0_0_30px_rgba(6,182,212,0.2)]',
-  };
-
-  return (
-    <motion.div
-      className={`bg-black/60 border-2 rounded-lg p-6 ${colorClasses[color]}`}
-      whileHover={{ y: -4 }}
-    >
-      <div className={`mb-3 ${colorClasses[color]}`}>{icon}</div>
-      <p className="text-gray-400 text-sm mb-1">{label}</p>
-      <p className="text-3xl font-bold text-gray-100">{value}</p>
-    </motion.div>
-  );
-}
-
-function ProductsTab({ products, onRefresh }: { products: Product[]; onRefresh: () => void }) {
-  return (
-    <motion.div variants={fadeInUp} initial="hidden" animate="visible" className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold text-pink-400">Products</h2>
-        <AnimatedButton variant="primary">
-          <Plus className="w-5 h-5 inline mr-2" />
-          Add Product
-        </AnimatedButton>
-      </div>
-
-      <div className="space-y-3">
-        {products.map(product => (
-          <div
-            key={product.id}
-            className="bg-black/60 border-2 border-pink-500/40 rounded-lg p-4 flex items-center gap-4"
-          >
-            <div className="w-16 h-16 rounded-lg overflow-hidden border border-pink-500/30">
-              <img src={product.thumbnail_url} alt={product.name} className="w-full h-full object-cover" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-gray-100">{product.name}</h3>
-              <p className="text-sm text-gray-400">${(product.price_cents / 100).toFixed(2)}</p>
-            </div>
-            <div className="flex gap-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${product.active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                {product.active ? 'Active' : 'Inactive'}
-              </span>
-              {product.featured && (
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-pink-500/20 text-pink-400">
-                  Featured
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </motion.div>
-  );
-}
-
-function OrdersTab({ orders }: { orders: Order[] }) {
-  return (
-    <motion.div variants={fadeInUp} initial="hidden" animate="visible" className="space-y-6">
-      <h2 className="text-3xl font-bold text-pink-400">Orders</h2>
-
-      <div className="space-y-3">
-        {orders.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            <p>No orders yet</p>
-          </div>
-        ) : (
-          orders.map(order => (
-            <div
-              key={order.id}
-              className="bg-black/60 border-2 border-pink-500/40 rounded-lg p-4"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-sm text-gray-400">#{order.id.slice(0, 8)}</span>
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                  order.status === 'paid' ? 'bg-green-500/20 text-green-400' :
-                  order.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
-                  'bg-red-500/20 text-red-400'
-                }`}>
-                  {order.status.toUpperCase()}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-200">{order.email}</p>
-                  <p className="text-sm text-gray-400">
-                    {new Date(order.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <p className="text-xl font-bold text-pink-400">
-                  ${(order.total_cents / 100).toFixed(2)}
-                </p>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-function ContentTab() {
-  return (
-    <motion.div variants={fadeInUp} initial="hidden" animate="visible" className="space-y-6">
-      <h2 className="text-3xl font-bold text-pink-400">Content Management</h2>
-      <div className="bg-black/60 border-2 border-pink-500/40 rounded-lg p-6">
-        <p className="text-gray-400">
-          CMS functionality for editing homepage content, bulletins, and about page text will be
-          implemented here.
-        </p>
-      </div>
-    </motion.div>
-  );
-}
