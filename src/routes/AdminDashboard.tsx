@@ -36,7 +36,11 @@ export function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true);
 
-    const { data: prods } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+    const { data: prods } = await supabase
+      .from('products')
+      .select('*')
+      .not('printify_id', 'is', null)
+      .order('created_at', { ascending: false });
     if (prods) setProducts(prods);
 
     const { data: ords } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
