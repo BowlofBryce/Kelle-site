@@ -55,24 +55,29 @@ Deno.serve(async (req: Request) => {
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
+      console.log('🎉 Checkout session completed:', session.id);
 
-      const { data: order } = await supabase
+      const { data: order, error: orderFetchError } = await supabase
         .from('orders')
         .select('*')
         .eq('stripe_session_id', session.id)
-        .single();
+        .maybeSingle();
 
-      if (!order) {
-        console.error('Order not found for session:', session.id);
+      if (orderFetchError || !order) {
+        console.error('❌ Order not found for session:', session.id, orderFetchError);
         return new Response('Order not found', { status: 404 });
       }
+
+      console.log('📦 Found order:', order.id);
 
       const customerName = session.customer_details?.name || 'Guest';
       const customerEmail = session.customer_details?.email || order.email;
       const customerPhone = session.customer_details?.phone || null;
       const shippingAddress = session.shipping_details?.address || session.customer_details?.address;
 
-      await supabase
+      console.log('📍 Shipping address:', JSON.stringify(shippingAddress));
+
+      const { error: updateError } = await supabase
         .from('orders')
         .update({
           status: 'paid',
@@ -85,6 +90,12 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', order.id);
 
+      if (updateError) {
+        console.error('❌ Failed to update order:', updateError);
+      } else {
+        console.log('✅ Order updated to paid status');
+      }
+
       const printifyToken = Deno.env.get('PRINTIFY_API_TOKEN');
       const printifyShopId = Deno.env.get('PRINTIFY_SHOP_ID');
 
@@ -94,6 +105,7 @@ Deno.serve(async (req: Request) => {
         printifyToken !== 'your_printify_api_token_here' &&
         printifyShopId !== 'your_printify_shop_id_here'
       ) {
+        console.log('🖨️ Creating Printify order for:', order.id);
         try {
           const functionUrl = `${supabaseUrl}/functions/v1/create-printify-order`;
           const response = await fetch(functionUrl, {
@@ -109,7 +121,7 @@ Deno.serve(async (req: Request) => {
 
           if (!response.ok) {
             const error = await response.text();
-            console.error('Failed to create Printify order:', error);
+            console.error('❌ Failed to create Printify order:', error);
             await supabase
               .from('orders')
               .update({
@@ -117,12 +129,16 @@ Deno.serve(async (req: Request) => {
                 metadata: {
                   ...order.metadata,
                   printify_error: error,
+                  printify_failed_at: new Date().toISOString(),
                 },
               })
               .eq('id', order.id);
+          } else {
+            const result = await response.json();
+            console.log('✅ Printify order created:', result.printifyOrderId);
           }
         } catch (error) {
-          console.error('Error calling Printify function:', error);
+          console.error('❌ Error calling Printify function:', error.message);
           await supabase
             .from('orders')
             .update({
@@ -130,12 +146,13 @@ Deno.serve(async (req: Request) => {
               metadata: {
                 ...order.metadata,
                 printify_error: error.message,
+                printify_failed_at: new Date().toISOString(),
               },
             })
             .eq('id', order.id);
         }
       } else {
-        console.log('Printify not configured, skipping fulfillment');
+        console.log('⚠️ Printify not configured, skipping fulfillment');
       }
 
       await supabase

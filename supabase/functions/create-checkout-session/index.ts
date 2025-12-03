@@ -122,13 +122,13 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    const { data: order } = await supabase
+    const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
         stripe_session_id: session.id,
         stripe_payment_id: session.payment_intent as string || null,
         status: 'pending',
-        email: customerEmail || 'guest@velvethol low.com',
+        email: customerEmail || 'guest@velvethollow.com',
         total_cents: totalCents,
         currency: 'usd',
         fulfillment_status: 'pending',
@@ -139,6 +139,61 @@ Deno.serve(async (req: Request) => {
       })
       .select()
       .single();
+
+    if (orderError || !order) {
+      console.error('Failed to create order:', orderError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to create order' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    const orderItems = [];
+    for (const item of items) {
+      const { data: product } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', item.productId)
+        .single();
+
+      if (!product) continue;
+
+      let price = product.price_cents;
+      let variantName = null;
+
+      if (item.variantId) {
+        const { data: variant } = await supabase
+          .from('variants')
+          .select('*')
+          .eq('id', item.variantId)
+          .single();
+
+        if (variant) {
+          price = variant.price_cents;
+          variantName = variant.name;
+        }
+      }
+
+      orderItems.push({
+        order_id: order.id,
+        product_id: item.productId,
+        variant_id: item.variantId || null,
+        name: variantName ? `${product.name} - ${variantName}` : product.name,
+        quantity: item.quantity,
+        price_cents: price,
+      });
+    }
+
+    const { error: itemsError } = await supabase
+      .from('order_items')
+      .insert(orderItems);
+
+    if (itemsError) {
+      console.error('Failed to create order items:', itemsError);
+    }
 
     return new Response(
       JSON.stringify({

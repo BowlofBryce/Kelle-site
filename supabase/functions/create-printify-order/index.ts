@@ -128,13 +128,19 @@ Deno.serve(async (req: Request) => {
         email: order.email,
         phone: order.customer_phone || '',
         country: address.country || 'US',
-        region: address.state || '',
-        address1: address.line1 || '',
-        address2: address.line2 || '',
+        region: address.state || address.region || '',
+        address1: address.line1 || address.address1 || '',
+        address2: address.line2 || address.address2 || '',
         city: address.city || '',
-        zip: address.postal_code || '',
+        zip: address.postal_code || address.zip || '',
       },
     };
+
+    console.log('Creating Printify order with data:', JSON.stringify({
+      external_id: printifyOrderData.external_id,
+      line_items_count: lineItems.length,
+      address_to: printifyOrderData.address_to,
+    }));
 
     const printifyResponse = await fetch(
       `https://api.printify.com/v1/shops/${printifyShopId}/orders.json`,
@@ -150,7 +156,10 @@ Deno.serve(async (req: Request) => {
 
     if (!printifyResponse.ok) {
       const errorText = await printifyResponse.text();
-      console.error('Printify API error:', errorText);
+      console.error('❌ PRINTIFY ORDER CREATION FAILED');
+      console.error(`Status: ${printifyResponse.status}`);
+      console.error(`Response: ${errorText}`);
+      console.error(`Order ID: ${orderId}`);
 
       await supabase
         .from('orders')
@@ -160,6 +169,7 @@ Deno.serve(async (req: Request) => {
             ...order.metadata,
             printify_error: errorText,
             printify_request: printifyOrderData,
+            printify_error_status: printifyResponse.status,
           },
         })
         .eq('id', orderId);
@@ -174,6 +184,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const printifyOrder = await printifyResponse.json();
+    console.log('✅ Printify order created successfully:', printifyOrder.id);
 
     await supabase
       .from('orders')
