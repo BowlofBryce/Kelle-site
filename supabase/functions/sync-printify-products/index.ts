@@ -85,7 +85,7 @@ Deno.serve(async (req: Request) => {
 
       const thumbnail = details.images?.[0]?.src || '';
       const images = details.images?.map((img: any) => img.src) || [];
-      const priceInCents = details.variants?.[0]?.price ? Math.round(details.variants[0].price * 100) : 2999;
+      const priceInCents = details.variants?.[0]?.price || 2999;
 
       const slug = details.title
         .toLowerCase()
@@ -174,7 +174,7 @@ Deno.serve(async (req: Request) => {
             product_id: currentProductId,
             printify_variant_id: variant.id.toString(),
             name: variant.title || 'Default',
-            price_cents: Math.round(variant.price * 100),
+            price_cents: variant.price,
             available: variant.is_available,
           };
 
