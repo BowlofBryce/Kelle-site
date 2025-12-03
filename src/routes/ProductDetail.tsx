@@ -34,6 +34,7 @@ export function ProductDetail() {
         .select('*')
         .eq('slug', slug)
         .eq('active', true)
+        .not('printify_id', 'is', null)
         .maybeSingle();
 
       if (!prod) {
@@ -57,6 +58,7 @@ export function ProductDetail() {
         .from('products')
         .select('*')
         .eq('active', true)
+        .not('printify_id', 'is', null)
         .neq('id', prod.id)
         .limit(4);
 

@@ -24,7 +24,11 @@ export function Shop() {
       const { data: cats } = await supabase.from('categories').select('*').order('name');
       if (cats) setCategories(cats);
 
-      let query = supabase.from('products').select('*').eq('active', true);
+      let query = supabase
+        .from('products')
+        .select('*')
+        .eq('active', true)
+        .not('printify_id', 'is', null);
 
       if (selectedCategory) {
         const { data: productCategories } = await supabase

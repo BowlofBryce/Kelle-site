@@ -24,6 +24,7 @@ export function Home() {
         .select('*')
         .eq('active', true)
         .eq('featured', true)
+        .not('printify_id', 'is', null)
         .limit(8);
 
       if (products) setFeaturedProducts(products);
