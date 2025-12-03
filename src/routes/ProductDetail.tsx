@@ -1,12 +1,13 @@
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ShoppingCart, Plus, Minus } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Plus, Minus, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useCart } from '../hooks/useCart';
 import { AnimatedButton } from '../components/ui/AnimatedButton';
 import { ProductGrid } from '../components/merch/ProductGrid';
 import { fadeInUp, scaleIn } from '../lib/animations';
+import { organizeVariants, getColorHex } from '../lib/variantUtils';
 import type { Database } from '../lib/database.types';
 
 type Product = Database['public']['Tables']['products']['Row'];
@@ -20,6 +21,8 @@ export function ProductDetail() {
   const [product, setProduct] = useState<Product | null>(null);
   const [variants, setVariants] = useState<Variant[]>([]);
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string>('');
+  const [selectedSize, setSelectedSize] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +54,17 @@ export function ProductDetail() {
 
       if (vars && vars.length > 0) {
         setVariants(vars);
-        setSelectedVariant(vars[0]);
+        const organized = organizeVariants(vars);
+        if (organized.colors.length > 0 && organized.sizes.length > 0) {
+          const firstColor = organized.colors[0];
+          const firstSize = organized.sizes[0];
+          setSelectedColor(firstColor);
+          setSelectedSize(firstSize);
+          const variant = organized.variantMap.get(`${firstColor}|${firstSize}`);
+          if (variant) setSelectedVariant(variant);
+        } else {
+          setSelectedVariant(vars[0]);
+        }
       }
 
       const { data: related } = await supabase
@@ -115,6 +128,19 @@ export function ProductDetail() {
   if (!product) return null;
 
   const displayPrice = selectedVariant?.price_cents || product.price_cents;
+  const variantOptions = organizeVariants(variants);
+
+  const handleColorSelect = (color: string) => {
+    setSelectedColor(color);
+    const variant = variantOptions.variantMap.get(`${color}|${selectedSize}`);
+    if (variant) setSelectedVariant(variant);
+  };
+
+  const handleSizeSelect = (size: string) => {
+    setSelectedSize(size);
+    const variant = variantOptions.variantMap.get(`${selectedColor}|${size}`);
+    if (variant) setSelectedVariant(variant);
+  };
 
   return (
     <div className="space-y-12">
@@ -160,25 +186,80 @@ export function ProductDetail() {
 
           <p className="text-gray-300 leading-relaxed">{product.description}</p>
 
-          {variants.length > 0 && (
+          {variantOptions.colors.length > 0 && (
             <div>
-              <h3 className="text-lg font-semibold mb-3 text-gray-200">Select Variant</h3>
+              <h3 className="text-lg font-semibold mb-3 text-gray-200">
+                Color: <span className="text-pink-400">{selectedColor}</span>
+              </h3>
               <div className="flex flex-wrap gap-3">
-                {variants.map(variant => (
-                  <motion.button
-                    key={variant.id}
-                    className={`px-4 py-2 rounded-lg border-2 transition-all ${
-                      selectedVariant?.id === variant.id
-                        ? 'border-pink-500 bg-pink-500/20 text-pink-300'
-                        : 'border-gray-600 text-gray-400 hover:border-pink-500/50'
-                    }`}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setSelectedVariant(variant)}
+                {variantOptions.colors.map(color => {
+                  const hexColor = getColorHex(color);
+                  const isSelected = selectedColor === color;
+
+                  return (
+                    <motion.button
+                      key={color}
+                      className={`relative w-12 h-12 rounded-full border-2 transition-all ${
+                        isSelected
+                          ? 'border-pink-500 shadow-[0_0_15px_rgba(255,0,150,0.5)]'
+                          : 'border-gray-600 hover:border-pink-500/50'
+                      }`}
+                      style={{ backgroundColor: hexColor }}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => handleColorSelect(color)}
+                      title={color}
+                    >
+                      {isSelected && (
+                        <motion.div
+                          className="absolute inset-0 flex items-center justify-center"
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                        >
+                          <div className="w-6 h-6 rounded-full bg-pink-500 flex items-center justify-center">
+                            <Check className="w-4 h-4 text-white" />
+                          </div>
+                        </motion.div>
+                      )}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {variantOptions.sizes.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold mb-3 text-gray-200">
+                Size: <span className="text-pink-400">{selectedSize}</span>
+              </h3>
+              <div className="relative">
+                <select
+                  value={selectedSize}
+                  onChange={e => handleSizeSelect(e.target.value)}
+                  className="w-full md:w-48 px-4 py-3 bg-black/60 border-2 border-pink-500/40 rounded-lg text-gray-200 focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500/50 appearance-none cursor-pointer"
+                >
+                  {variantOptions.sizes.map(size => (
+                    <option key={size} value={size} className="bg-black">
+                      {size}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <svg
+                    className="w-5 h-5 text-pink-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    {variant.name}
-                  </motion.button>
-                ))}
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </div>
               </div>
             </div>
           )}
