@@ -23,6 +23,7 @@ export function ProductDetail() {
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +61,7 @@ export function ProductDetail() {
           const firstSize = organized.sizes[0];
           setSelectedColor(firstColor);
           setSelectedSize(firstSize);
-          const variant = organized.variantMap.get(`${firstColor}|${firstSize}`);
+          const variant = organized.variantMap.get(`${firstSize}|${firstColor}`);
           if (variant) setSelectedVariant(variant);
         } else {
           setSelectedVariant(vars[0]);
@@ -130,15 +131,19 @@ export function ProductDetail() {
   const displayPrice = selectedVariant?.price_cents || product.price_cents;
   const variantOptions = organizeVariants(variants);
 
+  const productImages = product.images && Array.isArray(product.images) && product.images.length > 0
+    ? product.images
+    : [product.thumbnail_url || 'https://images.pexels.com/photos/1058728/pexels-photo-1058728.jpeg?auto=compress&cs=tinysrgb&w=800'];
+
   const handleColorSelect = (color: string) => {
     setSelectedColor(color);
-    const variant = variantOptions.variantMap.get(`${color}|${selectedSize}`);
+    const variant = variantOptions.variantMap.get(`${selectedSize}|${color}`);
     if (variant) setSelectedVariant(variant);
   };
 
   const handleSizeSelect = (size: string) => {
     setSelectedSize(size);
-    const variant = variantOptions.variantMap.get(`${selectedColor}|${size}`);
+    const variant = variantOptions.variantMap.get(`${size}|${selectedColor}`);
     if (variant) setSelectedVariant(variant);
   };
 
@@ -158,20 +163,43 @@ export function ProductDetail() {
           variants={scaleIn}
           initial="hidden"
           animate="visible"
-          className="relative"
+          className="space-y-4"
         >
           <div className="aspect-square rounded-xl overflow-hidden border-2 border-pink-500/40 shadow-[0_0_40px_rgba(255,0,150,0.3)]">
             <motion.img
-              src={
-                product.thumbnail_url ||
-                'https://images.pexels.com/photos/1058728/pexels-photo-1058728.jpeg?auto=compress&cs=tinysrgb&w=800'
-              }
-              alt={product.name}
+              key={selectedImageIndex}
+              src={productImages[selectedImageIndex]}
+              alt={`${product.name} - Image ${selectedImageIndex + 1}`}
               className="w-full h-full object-cover"
-              whileHover={{ scale: 1.05 }}
-              transition={{ type: 'spring', stiffness: 80, damping: 15 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
             />
           </div>
+
+          {productImages.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {productImages.map((image, index) => (
+                <motion.button
+                  key={index}
+                  onClick={() => setSelectedImageIndex(index)}
+                  className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${
+                    selectedImageIndex === index
+                      ? 'border-pink-500 shadow-[0_0_15px_rgba(255,0,150,0.5)]'
+                      : 'border-gray-600 hover:border-pink-500/50'
+                  }`}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <img
+                    src={image}
+                    alt={`${product.name} thumbnail ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </motion.button>
+              ))}
+            </div>
+          )}
         </motion.div>
 
         <motion.div variants={fadeInUp} initial="hidden" animate="visible" className="space-y-6">
@@ -184,7 +212,10 @@ export function ProductDetail() {
             </p>
           </div>
 
-          <p className="text-gray-300 leading-relaxed">{product.description}</p>
+          <div
+            className="text-gray-300 leading-relaxed prose prose-invert prose-pink max-w-none prose-p:my-2 prose-ul:my-2 prose-li:my-1"
+            dangerouslySetInnerHTML={{ __html: product.description || '' }}
+          />
 
           {variantOptions.colors.length > 0 && (
             <div>

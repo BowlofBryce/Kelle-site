@@ -3,8 +3,8 @@ import type { Database } from './database.types';
 type Variant = Database['public']['Tables']['variants']['Row'];
 
 export interface ParsedVariant {
-  color: string;
   size: string;
+  color: string;
   variant: Variant;
 }
 
@@ -47,8 +47,8 @@ export function parseVariant(variant: Variant): ParsedVariant | null {
 
   if (parts.length === 2) {
     return {
-      color: parts[0],
-      size: parts[1],
+      size: parts[0],
+      color: parts[1],
       variant,
     };
   }
