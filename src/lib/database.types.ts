@@ -108,6 +108,7 @@ export interface Database {
           price_cents: number
           printify_variant_id: string | null
           stock: number
+          preview_url: string | null
           created_at: string
         }
         Insert: {
@@ -118,6 +119,7 @@ export interface Database {
           price_cents: number
           printify_variant_id?: string | null
           stock?: number
+          preview_url?: string | null
           created_at?: string
         }
         Update: {
@@ -128,6 +130,7 @@ export interface Database {
           price_cents?: number
           printify_variant_id?: string | null
           stock?: number
+          preview_url?: string | null
           created_at?: string
         }
       }

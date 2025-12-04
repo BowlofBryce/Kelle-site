@@ -163,6 +163,20 @@ Deno.serve(async (req: Request) => {
       if (details.variants && details.variants.length > 0) {
         console.log(`   🎨 Processing ${details.variants.length} variants`);
 
+        const colorImageMap = new Map<string, string>();
+
+        if (details.images && details.images.length > 0) {
+          for (const img of details.images) {
+            if (img.variant_ids && img.variant_ids.length > 0) {
+              for (const variantId of img.variant_ids) {
+                if (!colorImageMap.has(variantId.toString())) {
+                  colorImageMap.set(variantId.toString(), img.src);
+                }
+              }
+            }
+          }
+        }
+
         for (const variant of details.variants) {
           const { data: existingVariant } = await supabase
             .from('variants')
@@ -170,12 +184,15 @@ Deno.serve(async (req: Request) => {
             .eq('printify_variant_id', variant.id.toString())
             .maybeSingle();
 
+          const previewUrl = colorImageMap.get(variant.id.toString()) || images[0] || thumbnail;
+
           const variantData = {
             product_id: currentProductId,
             printify_variant_id: variant.id.toString(),
             name: variant.title || 'Default',
             price_cents: variant.price,
             available: variant.is_available,
+            preview_url: previewUrl,
           };
 
           if (existingVariant) {

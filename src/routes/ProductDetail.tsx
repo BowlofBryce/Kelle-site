@@ -131,20 +131,30 @@ export function ProductDetail() {
   const displayPrice = selectedVariant?.price_cents || product.price_cents;
   const variantOptions = organizeVariants(variants);
 
-  const productImages = product.images && Array.isArray(product.images) && product.images.length > 0
+  const baseImages = product.images && Array.isArray(product.images) && product.images.length > 0
     ? product.images
     : [product.thumbnail_url || 'https://images.pexels.com/photos/1058728/pexels-photo-1058728.jpeg?auto=compress&cs=tinysrgb&w=800'];
+
+  const productImages = selectedVariant?.preview_url
+    ? [selectedVariant.preview_url, ...baseImages.filter(img => img !== selectedVariant.preview_url)]
+    : baseImages;
 
   const handleColorSelect = (color: string) => {
     setSelectedColor(color);
     const variant = variantOptions.variantMap.get(`${selectedSize}|${color}`);
-    if (variant) setSelectedVariant(variant);
+    if (variant) {
+      setSelectedVariant(variant);
+      setSelectedImageIndex(0);
+    }
   };
 
   const handleSizeSelect = (size: string) => {
     setSelectedSize(size);
     const variant = variantOptions.variantMap.get(`${size}|${selectedColor}`);
-    if (variant) setSelectedVariant(variant);
+    if (variant) {
+      setSelectedVariant(variant);
+      setSelectedImageIndex(0);
+    }
   };
 
   return (
