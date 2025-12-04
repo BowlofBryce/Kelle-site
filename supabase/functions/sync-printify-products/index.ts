@@ -1,5 +1,139 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { PrintifyClient } from '../_shared/printifyClient.ts';
+
+interface PrintifyVariant {
+  id: number;
+  sku: string;
+  cost: number;
+  price: number;
+  title: string;
+  grams: number;
+  is_enabled: boolean;
+  is_default: boolean;
+  is_available: boolean;
+  options: number[];
+}
+
+interface PrintifyOption {
+  name: string;
+  type: string;
+  values: Array<{
+    id: number;
+    title: string;
+    colors?: string[];
+  }>;
+}
+
+interface PrintifyImage {
+  src: string;
+  variant_ids: number[];
+  position: string;
+  is_default: boolean;
+}
+
+interface PrintifyProduct {
+  id: string;
+  title: string;
+  description: string;
+  tags: string[];
+  options: PrintifyOption[];
+  variants: PrintifyVariant[];
+  images: PrintifyImage[];
+  created_at: string;
+  updated_at: string;
+  visible: boolean;
+  is_locked: boolean;
+  blueprint_id: number;
+  user_id: number;
+  shop_id: number;
+  print_provider_id: number;
+}
+
+interface PrintifyProductSummary {
+  id: string;
+  title: string;
+  description: string;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  visible: boolean;
+}
+
+class PrintifyClient {
+  private apiKey: string;
+  private shopId: string;
+  private baseUrl = 'https://api.printify.com/v1';
+
+  constructor(apiKey: string, shopId: string) {
+    this.apiKey = apiKey;
+    this.shopId = shopId;
+  }
+
+  private async fetch<T>(endpoint: string): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`;
+
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Printify API Error: ${response.status} - ${text}`);
+      throw new Error(`Printify API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  async getProducts(): Promise<PrintifyProductSummary[]> {
+    const data = await this.fetch<{ data: PrintifyProductSummary[] }>(
+      `/shops/${this.shopId}/products.json`
+    );
+    return data.data;
+  }
+
+  async getProduct(productId: string): Promise<PrintifyProduct> {
+    return this.fetch<PrintifyProduct>(
+      `/shops/${this.shopId}/products/${productId}.json`
+    );
+  }
+
+  parseVariantName(variant: PrintifyVariant, options: PrintifyOption[]): { size: string; color: string } {
+    const parts = variant.title.split('/').map(s => s.trim());
+
+    if (parts.length === 2) {
+      return { size: parts[0], color: parts[1] };
+    }
+
+    const sizeOption = options.find(opt => opt.type === 'size');
+    const colorOption = options.find(opt => opt.type === 'color');
+
+    let size = '';
+    let color = '';
+
+    variant.options.forEach(optionId => {
+      if (sizeOption) {
+        const sizeValue = sizeOption.values.find(v => v.id === optionId);
+        if (sizeValue) size = sizeValue.title;
+      }
+      if (colorOption) {
+        const colorValue = colorOption.values.find(v => v.id === optionId);
+        if (colorValue) color = colorValue.title;
+      }
+    });
+
+    return { size: size || 'One Size', color: color || 'Default' };
+  }
+
+  getVariantImage(variant: PrintifyVariant, images: PrintifyImage[]): string | null {
+    const variantImage = images.find(img =>
+      img.variant_ids.includes(variant.id) && img.position === 'front'
+    );
+    return variantImage?.src || null;
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,16 +172,16 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const printify = new PrintifyClient(printifyToken, printifyShopId);
 
-    console.log('🚀 Starting Printify product sync...');
+    console.log('Starting Printify product sync...');
 
     const productList = await printify.getProducts();
-    console.log(`📦 Found ${productList.length} products from Printify`);
+    console.log(`Found ${productList.length} products from Printify`);
 
     const syncedProducts = [];
 
     for (const productSummary of productList) {
       try {
-        console.log(`\n🔄 Processing: ${productSummary.title}`);
+        console.log(`Processing: ${productSummary.title}`);
 
         const details = await printify.getProduct(productSummary.id);
 
@@ -57,7 +191,7 @@ Deno.serve(async (req: Request) => {
         const enabledVariants = details.variants.filter(v => v.is_enabled && v.is_available);
 
         if (enabledVariants.length === 0) {
-          console.log(`   ⚠️ No enabled variants, skipping product`);
+          console.log(`No enabled variants, skipping product`);
           continue;
         }
 
@@ -90,14 +224,14 @@ Deno.serve(async (req: Request) => {
           .single();
 
         if (upsertError || !upsertedProduct) {
-          console.error(`   ❌ Upsert error:`, upsertError);
+          console.error(`Upsert error:`, upsertError);
           continue;
         }
 
-        console.log(`   ✅ Synced product: ${upsertedProduct.id}`);
+        console.log(`Synced product: ${upsertedProduct.id}`);
         syncedProducts.push({ id: upsertedProduct.id, printify_id: productSummary.id });
 
-        console.log(`   🎨 Processing ${enabledVariants.length} enabled variants`);
+        console.log(`Processing ${enabledVariants.length} enabled variants`);
 
         const variantsToUpsert = enabledVariants.map(variant => {
           const previewUrl = printify.getVariantImage(variant, details.images);
@@ -120,9 +254,9 @@ Deno.serve(async (req: Request) => {
           .upsert(variantsToUpsert, { onConflict: 'printify_variant_id' });
 
         if (variantsUpsertError) {
-          console.error(`   ❌ Variants upsert error:`, variantsUpsertError);
+          console.error(`Variants upsert error:`, variantsUpsertError);
         } else {
-          console.log(`   ✅ Synced ${variantsToUpsert.length} variants`);
+          console.log(`Synced ${variantsToUpsert.length} variants`);
         }
 
         await supabase
@@ -132,12 +266,12 @@ Deno.serve(async (req: Request) => {
           .not('printify_variant_id', 'in', `(${enabledVariants.map(v => v.id).join(',')})`);
 
       } catch (error) {
-        console.error(`❌ Error processing product ${productSummary.title}:`, error);
+        console.error(`Error processing product ${productSummary.title}:`, error);
         continue;
       }
     }
 
-    console.log(`\n✅ Sync complete! Processed ${syncedProducts.length} products`);
+    console.log(`Sync complete! Processed ${syncedProducts.length} products`);
 
     return new Response(
       JSON.stringify({
