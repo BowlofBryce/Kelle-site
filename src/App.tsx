@@ -25,8 +25,8 @@ function App() {
           <Route path="checkout/cancel" element={<CheckoutCancel />} />
           <Route path="about" element={<About />} />
         </Route>
-        <Route path="velveth0ll0w-4dm1n" element={<AdminLogin />} />
-        <Route path="velveth0ll0w-4dm1n/dashboard" element={<AdminDashboard />} />
+        <Route path="admin" element={<AdminLogin />} />
+        <Route path="admin/dashboard" element={<AdminDashboard />} />
       </Routes>
     </BrowserRouter>
   );

@@ -28,7 +28,7 @@ export function AdminLogin() {
     }
 
     if (data.user) {
-      navigate('/velveth0ll0w-4dm1n/dashboard');
+      navigate('/admin/dashboard');
     }
 
     setLoading(false);
