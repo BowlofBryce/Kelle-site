@@ -17,27 +17,54 @@ export interface VariantOptions {
 const colorMap: Record<string, string> = {
   'black': '#000000',
   'white': '#FFFFFF',
+  'vintage white': '#F5F5DC',
   'navy': '#001f3f',
   'royal': '#0074D9',
   'sky': '#87CEEB',
+  'light blue': '#ADD8E6',
+  'carolina blue': '#7BAFD4',
+  'indigo blue': '#4B0082',
+  'sapphire': '#0F52BA',
+  'antique sapphire': '#2F5F8F',
+  'heather sport royal': '#4169E1',
+  'heather sport dark navy': '#1C2841',
   'red': '#FF4136',
+  'cherry red': '#DE3163',
+  'antique cherry red': '#9B2D30',
+  'cardinal red': '#C41E3A',
+  'heather scarlet red': '#CD5C5C',
+  'burgundy': '#800020',
   'maroon': '#85144b',
+  'heather sport dark maroon': '#5B1A28',
+  'garnet': '#733635',
   'pink': '#FFB6C1',
+  'light pink': '#FFB6C1',
+  'safety pink': '#FF69B4',
   'pink lemonade': '#FFB3D9',
+  'heliconia': '#D62598',
   'forest green': '#228B22',
+  'irish green': '#009A49',
+  'military green': '#4B5320',
+  'safety green': '#7FFF00',
   'lime': '#32CD32',
   'yellow': '#FFEB3B',
   'yellow haze': '#F4E87C',
   'mustard': '#FFDB58',
+  'gold': '#FFD700',
   'orange': '#FF851B',
+  'safety orange': '#FF6600',
   'daisy': '#FFEB3B',
   'purple': '#B10DC9',
   'lavender': '#E6E6FA',
   'brown': '#8B4513',
+  'dark chocolate': '#5C4033',
   'cocoa': '#6F4E37',
   'sand': '#C2B280',
   'heather grey': '#B0B0B0',
+  'sport grey': '#A8A9AD',
   'grey': '#808080',
+  'dark heather': '#616161',
+  'graphite heather': '#424242',
   'charcoal': '#36454F',
   'ash': '#B2BEB5',
 };
@@ -68,7 +95,7 @@ export function organizeVariants(variants: Variant[]): VariantOptions {
   parsed.forEach(({ color, size, variant }) => {
     colorsSet.add(color);
     sizesSet.add(size);
-    variantMap.set(`${color}|${size}`, variant);
+    variantMap.set(`${size}|${color}`, variant);
   });
 
   const sizes = Array.from(sizesSet).sort((a, b) => {
