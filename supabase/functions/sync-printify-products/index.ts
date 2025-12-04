@@ -62,26 +62,45 @@ Deno.serve(async (req: Request) => {
 
     console.log(`📦 Found ${printifyProducts.data?.length || 0} products from Printify`);
 
-    for (const product of printifyProducts.data || []) {
-      console.log(`\n🔄 Processing Printify product: ${product.id}`);
+    const fetchProductDetails = async (product: any) => {
+      try {
+        const detailResponse = await fetch(
+          `https://api.printify.com/v1/shops/${printifyShopId}/products/${product.id}.json`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${printifyToken}`,
+            },
+          }
+        );
 
-      const detailResponse = await fetch(
-        `https://api.printify.com/v1/shops/${printifyShopId}/products/${product.id}.json`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${printifyToken}`,
-          },
+        if (!detailResponse.ok) {
+          console.error(`❌ Failed to fetch details for product ${product.id}`);
+          return null;
         }
-      );
 
-      if (!detailResponse.ok) {
-        console.error(`❌ Failed to fetch details for product ${product.id}`);
+        return await detailResponse.json();
+      } catch (error) {
+        console.error(`❌ Error fetching product ${product.id}:`, error);
+        return null;
+      }
+    };
+
+    console.log(`🚀 Fetching product details in parallel...`);
+    const detailsPromises = (printifyProducts.data || []).map(fetchProductDetails);
+    const allDetails = await Promise.all(detailsPromises);
+
+    console.log(`✅ Fetched all product details`);
+
+    for (let i = 0; i < allDetails.length; i++) {
+      const details = allDetails[i];
+      const product = printifyProducts.data[i];
+
+      if (!details) {
         continue;
       }
 
-      const details = await detailResponse.json();
-      console.log(`   Title: ${details.title}`);
+      console.log(`\n🔄 Processing: ${details.title}`);
 
       const thumbnail = details.images?.[0]?.src || '';
       const images = details.images?.map((img: any) => img.src) || [];
@@ -92,45 +111,10 @@ Deno.serve(async (req: Request) => {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
 
-      const { data: existingProduct } = await supabase
+      const { data: upsertedProduct, error: upsertError } = await supabase
         .from('products')
-        .select('id')
-        .eq('printify_id', product.id)
-        .maybeSingle();
-
-      let currentProductId: string;
-
-      if (existingProduct) {
-        console.log(`   ✏️  Updating existing product: ${existingProduct.id}`);
-
-        const { error: updateError } = await supabase
-          .from('products')
-          .update({
-            name: details.title,
-            slug: slug,
-            description: details.description || '',
-            price_cents: priceInCents,
-            thumbnail_url: thumbnail,
-            images: images,
-            active: details.visible,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('printify_id', product.id);
-
-        if (updateError) {
-          console.error(`   ❌ Update error:`, updateError);
-        } else {
-          console.log(`   ✅ Updated successfully`);
-          syncedProducts.push({ id: existingProduct.id, action: 'updated', printify_id: product.id });
-        }
-
-        currentProductId = existingProduct.id;
-      } else {
-        console.log(`   ➕ Creating new product`);
-
-        const { data: newProduct, error: insertError } = await supabase
-          .from('products')
-          .insert({
+        .upsert(
+          {
             printify_id: product.id,
             name: details.title,
             slug: slug,
@@ -141,27 +125,25 @@ Deno.serve(async (req: Request) => {
             active: details.visible,
             featured: false,
             category: 'merch',
-          })
-          .select()
-          .single();
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'printify_id' }
+        )
+        .select()
+        .single();
 
-        if (insertError) {
-          console.error(`   ❌ Insert error:`, insertError);
-          continue;
-        }
-
-        if (!newProduct) {
-          console.error(`   ❌ No product returned after insert`);
-          continue;
-        }
-
-        console.log(`   ✅ Created successfully: ${newProduct.id}`);
-        syncedProducts.push({ id: newProduct.id, action: 'created', printify_id: product.id });
-        currentProductId = newProduct.id;
+      if (upsertError || !upsertedProduct) {
+        console.error(`   ❌ Upsert error:`, upsertError);
+        continue;
       }
 
+      console.log(`   ✅ Synced product: ${upsertedProduct.id}`);
+      syncedProducts.push({ id: upsertedProduct.id, printify_id: product.id });
+
+      const currentProductId = upsertedProduct.id;
+
       if (details.variants && details.variants.length > 0) {
-        console.log(`   🎨 Processing ${details.variants.length} variants`);
+        console.log(`   🎨 Batch upserting ${details.variants.length} variants`);
 
         const colorImageMap = new Map<string, string>();
 
@@ -177,16 +159,10 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        for (const variant of details.variants) {
-          const { data: existingVariant } = await supabase
-            .from('variants')
-            .select('id')
-            .eq('printify_variant_id', variant.id.toString())
-            .maybeSingle();
-
+        const variantsToUpsert = details.variants.map((variant: any) => {
           const previewUrl = colorImageMap.get(variant.id.toString()) || images[0] || thumbnail;
 
-          const variantData = {
+          return {
             product_id: currentProductId,
             printify_variant_id: variant.id.toString(),
             name: variant.title || 'Default',
@@ -194,27 +170,16 @@ Deno.serve(async (req: Request) => {
             available: variant.is_available,
             preview_url: previewUrl,
           };
+        });
 
-          if (existingVariant) {
-            const { error: variantUpdateError } = await supabase
-              .from('variants')
-              .update(variantData)
-              .eq('printify_variant_id', variant.id.toString());
+        const { error: variantsUpsertError } = await supabase
+          .from('variants')
+          .upsert(variantsToUpsert, { onConflict: 'printify_variant_id' });
 
-            if (variantUpdateError) {
-              console.error(`      ❌ Variant update error:`, variantUpdateError);
-            }
-          } else {
-            const { error: variantInsertError } = await supabase
-              .from('variants')
-              .insert(variantData);
-
-            if (variantInsertError) {
-              console.error(`      ❌ Variant insert error:`, variantInsertError);
-            } else {
-              console.log(`      ✅ Created variant: ${variant.title}`);
-            }
-          }
+        if (variantsUpsertError) {
+          console.error(`   ❌ Variants upsert error:`, variantsUpsertError);
+        } else {
+          console.log(`   ✅ Synced ${variantsToUpsert.length} variants`);
         }
       }
     }
