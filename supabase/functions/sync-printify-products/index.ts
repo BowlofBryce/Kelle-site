@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { PrintifyClient } from '../_shared/printifyClient.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -35,140 +36,82 @@ Deno.serve(async (req: Request) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
+    const printify = new PrintifyClient(printifyToken, printifyShopId);
 
-    const printifyResponse = await fetch(
-      `https://api.printify.com/v1/shops/${printifyShopId}/products.json`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${printifyToken}`,
-        },
-      }
-    );
+    console.log('🚀 Starting Printify product sync...');
 
-    if (!printifyResponse.ok) {
-      const errorText = await printifyResponse.text();
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch Printify products', details: errorText }),
-        {
-          status: printifyResponse.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
+    const productList = await printify.getProducts();
+    console.log(`📦 Found ${productList.length} products from Printify`);
 
-    const printifyProducts = await printifyResponse.json();
     const syncedProducts = [];
 
-    console.log(`📦 Found ${printifyProducts.data?.length || 0} products from Printify`);
-
-    const fetchProductDetails = async (product: any) => {
+    for (const productSummary of productList) {
       try {
-        const detailResponse = await fetch(
-          `https://api.printify.com/v1/shops/${printifyShopId}/products/${product.id}.json`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${printifyToken}`,
+        console.log(`\n🔄 Processing: ${productSummary.title}`);
+
+        const details = await printify.getProduct(productSummary.id);
+
+        const thumbnail = details.images?.[0]?.src || '';
+        const images = details.images?.map(img => img.src) || [];
+
+        const enabledVariants = details.variants.filter(v => v.is_enabled && v.is_available);
+
+        if (enabledVariants.length === 0) {
+          console.log(`   ⚠️ No enabled variants, skipping product`);
+          continue;
+        }
+
+        const priceInCents = enabledVariants[0]?.price || 2999;
+
+        const slug = details.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+
+        const { data: upsertedProduct, error: upsertError } = await supabase
+          .from('products')
+          .upsert(
+            {
+              printify_id: productSummary.id,
+              name: details.title,
+              slug: slug,
+              description: details.description || '',
+              price_cents: priceInCents,
+              thumbnail_url: thumbnail,
+              images: images,
+              active: details.visible,
+              featured: false,
+              category: 'merch',
+              updated_at: new Date().toISOString(),
             },
-          }
-        );
+            { onConflict: 'printify_id' }
+          )
+          .select()
+          .single();
 
-        if (!detailResponse.ok) {
-          console.error(`❌ Failed to fetch details for product ${product.id}`);
-          return null;
+        if (upsertError || !upsertedProduct) {
+          console.error(`   ❌ Upsert error:`, upsertError);
+          continue;
         }
 
-        return await detailResponse.json();
-      } catch (error) {
-        console.error(`❌ Error fetching product ${product.id}:`, error);
-        return null;
-      }
-    };
+        console.log(`   ✅ Synced product: ${upsertedProduct.id}`);
+        syncedProducts.push({ id: upsertedProduct.id, printify_id: productSummary.id });
 
-    console.log(`🚀 Fetching product details in parallel...`);
-    const detailsPromises = (printifyProducts.data || []).map(fetchProductDetails);
-    const allDetails = await Promise.all(detailsPromises);
+        console.log(`   🎨 Processing ${enabledVariants.length} enabled variants`);
 
-    console.log(`✅ Fetched all product details`);
-
-    for (let i = 0; i < allDetails.length; i++) {
-      const details = allDetails[i];
-      const product = printifyProducts.data[i];
-
-      if (!details) {
-        continue;
-      }
-
-      console.log(`\n🔄 Processing: ${details.title}`);
-
-      const thumbnail = details.images?.[0]?.src || '';
-      const images = details.images?.map((img: any) => img.src) || [];
-      const priceInCents = details.variants?.[0]?.price || 2999;
-
-      const slug = details.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-
-      const { data: upsertedProduct, error: upsertError } = await supabase
-        .from('products')
-        .upsert(
-          {
-            printify_id: product.id,
-            name: details.title,
-            slug: slug,
-            description: details.description || '',
-            price_cents: priceInCents,
-            thumbnail_url: thumbnail,
-            images: images,
-            active: details.visible,
-            featured: false,
-            category: 'merch',
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'printify_id' }
-        )
-        .select()
-        .single();
-
-      if (upsertError || !upsertedProduct) {
-        console.error(`   ❌ Upsert error:`, upsertError);
-        continue;
-      }
-
-      console.log(`   ✅ Synced product: ${upsertedProduct.id}`);
-      syncedProducts.push({ id: upsertedProduct.id, printify_id: product.id });
-
-      const currentProductId = upsertedProduct.id;
-
-      if (details.variants && details.variants.length > 0) {
-        console.log(`   🎨 Batch upserting ${details.variants.length} variants`);
-
-        const colorImageMap = new Map<string, string>();
-
-        if (details.images && details.images.length > 0) {
-          for (const img of details.images) {
-            if (img.variant_ids && img.variant_ids.length > 0) {
-              for (const variantId of img.variant_ids) {
-                if (!colorImageMap.has(variantId.toString())) {
-                  colorImageMap.set(variantId.toString(), img.src);
-                }
-              }
-            }
-          }
-        }
-
-        const variantsToUpsert = details.variants.map((variant: any) => {
-          const previewUrl = colorImageMap.get(variant.id.toString()) || images[0] || thumbnail;
+        const variantsToUpsert = enabledVariants.map(variant => {
+          const previewUrl = printify.getVariantImage(variant, details.images);
+          const { size, color } = printify.parseVariantName(variant, details.options);
 
           return {
-            product_id: currentProductId,
+            product_id: upsertedProduct.id,
             printify_variant_id: variant.id.toString(),
-            name: variant.title || 'Default',
+            name: `${size} / ${color}`,
+            sku: variant.sku || `${productSummary.id}-${variant.id}`,
             price_cents: variant.price,
-            available: variant.is_available,
-            preview_url: previewUrl,
+            available: variant.is_available && variant.is_enabled,
+            stock: variant.is_available ? 100 : 0,
+            preview_url: previewUrl || thumbnail,
           };
         });
 
@@ -181,6 +124,16 @@ Deno.serve(async (req: Request) => {
         } else {
           console.log(`   ✅ Synced ${variantsToUpsert.length} variants`);
         }
+
+        await supabase
+          .from('variants')
+          .delete()
+          .eq('product_id', upsertedProduct.id)
+          .not('printify_variant_id', 'in', `(${enabledVariants.map(v => v.id).join(',')})`);
+
+      } catch (error) {
+        console.error(`❌ Error processing product ${productSummary.title}:`, error);
+        continue;
       }
     }
 
@@ -201,7 +154,7 @@ Deno.serve(async (req: Request) => {
     console.error('Error syncing Printify products:', error);
     return new Response(
       JSON.stringify({
-        error: error.message || 'Failed to sync Printify products',
+        error: error instanceof Error ? error.message : 'Failed to sync Printify products',
       }),
       {
         status: 500,

@@ -51,7 +51,8 @@ export function ProductDetail() {
       const { data: vars } = await supabase
         .from('variants')
         .select('*')
-        .eq('product_id', prod.id);
+        .eq('product_id', prod.id)
+        .eq('available', true);
 
       if (vars && vars.length > 0) {
         setVariants(vars);
