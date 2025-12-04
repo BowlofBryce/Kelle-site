@@ -7,7 +7,7 @@ import { useCart } from '../hooks/useCart';
 import { AnimatedButton } from '../components/ui/AnimatedButton';
 import { ProductGrid } from '../components/merch/ProductGrid';
 import { fadeInUp, scaleIn } from '../lib/animations';
-import { organizeVariants, getColorHex } from '../lib/variantUtils';
+import { organizeVariants, getColorInfo } from '../lib/variantUtils';
 import type { Database } from '../lib/database.types';
 
 type Product = Database['public']['Tables']['products']['Row'];
@@ -136,24 +136,24 @@ export function ProductDetail() {
     : [product.thumbnail_url || 'https://images.pexels.com/photos/1058728/pexels-photo-1058728.jpeg?auto=compress&cs=tinysrgb&w=800'];
 
   const productImages = selectedVariant?.preview_url
-    ? [selectedVariant.preview_url, ...baseImages.filter(img => img !== selectedVariant.preview_url)]
+    ? [selectedVariant.preview_url, ...baseImages]
     : baseImages;
 
   const handleColorSelect = (color: string) => {
     setSelectedColor(color);
+    setSelectedImageIndex(0);
     const variant = variantOptions.variantMap.get(`${selectedSize}|${color}`);
     if (variant) {
       setSelectedVariant(variant);
-      setSelectedImageIndex(0);
     }
   };
 
   const handleSizeSelect = (size: string) => {
     setSelectedSize(size);
+    setSelectedImageIndex(0);
     const variant = variantOptions.variantMap.get(`${size}|${selectedColor}`);
     if (variant) {
       setSelectedVariant(variant);
-      setSelectedImageIndex(0);
     }
   };
 
@@ -234,31 +234,42 @@ export function ProductDetail() {
               </h3>
               <div className="flex flex-wrap gap-3">
                 {variantOptions.colors.map(color => {
-                  const hexColor = getColorHex(color);
+                  const colorInfo = getColorInfo(color, variants, variantOptions.sizes);
                   const isSelected = selectedColor === color;
 
                   return (
                     <motion.button
                       key={color}
-                      className={`relative w-12 h-12 rounded-full border-2 transition-all ${
+                      className={`relative w-16 h-16 rounded-lg border-2 overflow-hidden transition-all ${
                         isSelected
                           ? 'border-pink-500 shadow-[0_0_15px_rgba(255,0,150,0.5)]'
                           : 'border-gray-600 hover:border-pink-500/50'
                       }`}
-                      style={{ backgroundColor: hexColor }}
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
                       onClick={() => handleColorSelect(color)}
                       title={color}
                     >
+                      {colorInfo.previewUrl ? (
+                        <img
+                          src={colorInfo.previewUrl}
+                          alt={color}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div
+                          className="w-full h-full"
+                          style={{ backgroundColor: colorInfo.hexColor }}
+                        />
+                      )}
                       {isSelected && (
                         <motion.div
-                          className="absolute inset-0 flex items-center justify-center"
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
+                          className="absolute inset-0 flex items-center justify-center bg-black/40"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
                         >
-                          <div className="w-6 h-6 rounded-full bg-pink-500 flex items-center justify-center">
-                            <Check className="w-4 h-4 text-white" />
+                          <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center">
+                            <Check className="w-5 h-5 text-white" />
                           </div>
                         </motion.div>
                       )}

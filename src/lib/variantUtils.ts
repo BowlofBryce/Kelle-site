@@ -83,6 +83,12 @@ export function parseVariant(variant: Variant): ParsedVariant | null {
   return null;
 }
 
+export interface ColorInfo {
+  name: string;
+  previewUrl: string | null;
+  hexColor: string;
+}
+
 export function organizeVariants(variants: Variant[]): VariantOptions {
   const parsed = variants.map(parseVariant).filter((v): v is ParsedVariant => v !== null);
 
@@ -113,6 +119,20 @@ export function organizeVariants(variants: Variant[]): VariantOptions {
     colors: Array.from(colorsSet),
     sizes,
     variantMap,
+  };
+}
+
+export function getColorInfo(colorName: string, variants: Variant[], sizes: string[]): ColorInfo {
+  const firstSize = sizes[0];
+  const variant = variants.find(v => {
+    const parsed = parseVariant(v);
+    return parsed && parsed.color === colorName && parsed.size === firstSize;
+  });
+
+  return {
+    name: colorName,
+    previewUrl: variant?.preview_url || null,
+    hexColor: getColorHex(colorName),
   };
 }
 
