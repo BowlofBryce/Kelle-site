@@ -30,8 +30,44 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchData();
+    checkAuth();
   }, []);
+
+  const checkAuth = async () => {
+    const token = localStorage.getItem('admin_session_token');
+
+    if (!token) {
+      navigate('/admin');
+      return;
+    }
+
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-admin-session`;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token }),
+      });
+
+      const result = await response.json();
+
+      if (!result.valid) {
+        localStorage.removeItem('admin_session_token');
+        navigate('/admin');
+        return;
+      }
+
+      fetchData();
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      localStorage.removeItem('admin_session_token');
+      navigate('/admin');
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -58,7 +94,8 @@ export function AdminDashboard() {
   };
 
   const handleSignOut = async () => {
-    navigate('/');
+    localStorage.removeItem('admin_session_token');
+    navigate('/admin');
   };
 
   return (

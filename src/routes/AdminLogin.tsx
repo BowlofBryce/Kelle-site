@@ -1,17 +1,14 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, AlertCircle } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
+import { Lock, AlertCircle, Key } from 'lucide-react';
 import { AnimatedButton } from '../components/ui/AnimatedButton';
 import { fadeInUp } from '../lib/animations';
 
 export function AdminLogin() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [adminKey, setAdminKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,19 +16,31 @@ export function AdminLogin() {
     setError('');
     setLoading(true);
 
-    const { data, error: signInError } = await signIn(email, password);
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-admin-key`;
 
-    if (signInError) {
-      setError(signInError.message);
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ key: adminKey }),
+      });
+
+      const result = await response.json();
+
+      if (result.valid && result.token) {
+        localStorage.setItem('admin_session_token', result.token);
+        navigate('/admin/dashboard');
+      } else {
+        setError('Invalid admin key');
+      }
+    } catch (err) {
+      setError('Authentication failed. Please try again.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (data.user) {
-      navigate('/admin/dashboard');
-    }
-
-    setLoading(false);
   };
 
   return (
@@ -77,34 +86,22 @@ export function AdminLogin() {
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Email Address
+                Admin Key
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  type="text"
+                  value={adminKey}
+                  onChange={e => setAdminKey(e.target.value.toUpperCase())}
                   required
-                  className="w-full pl-10 pr-4 py-3 bg-black/60 border-2 border-pink-500/40 rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:border-pink-500 transition-colors"
-                  placeholder="admin@velveth ollow.com"
+                  className="w-full pl-10 pr-4 py-3 bg-black/60 border-2 border-pink-500/40 rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:border-pink-500 transition-colors font-mono tracking-wider"
+                  placeholder="VH-XXXXXXXX-XXXXXXXX-XXXXXXXX"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-black/60 border-2 border-pink-500/40 rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:border-pink-500 transition-colors"
-                  placeholder="••••••••"
-                />
-              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Enter your secure admin key to access the dashboard
+              </p>
             </div>
 
             <AnimatedButton type="submit" className="w-full" disabled={loading}>
