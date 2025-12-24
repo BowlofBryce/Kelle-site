@@ -210,6 +210,15 @@ Deno.serve(async (req: Request) => {
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/^-+|-+$/g, '');
 
+        const { data: existingProduct } = await supabase
+          .from('products')
+          .select('id, active, featured')
+          .eq('printify_id', productSummary.id)
+          .maybeSingle();
+
+        const resolvedActive = existingProduct?.active ?? true;
+        const resolvedFeatured = existingProduct?.featured ?? false;
+
         const { data: upsertedProduct, error: upsertError } = await supabase
           .from('products')
           .upsert(
@@ -221,8 +230,8 @@ Deno.serve(async (req: Request) => {
               price_cents: priceInCents,
               thumbnail_url: thumbnail,
               images: images,
-              active: details.visible,
-              featured: false,
+              active: resolvedActive,
+              featured: resolvedFeatured,
               category: 'merch',
               updated_at: new Date().toISOString(),
             },

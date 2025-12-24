@@ -32,7 +32,7 @@ export function AdminLogin() {
 
       if (result.valid && result.token) {
         localStorage.setItem('admin_session_token', result.token);
-        navigate('/admin/dashboard');
+        navigate('/backstage/dashboard');
       } else {
         setError('Invalid admin key');
       }

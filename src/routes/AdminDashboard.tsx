@@ -37,7 +37,7 @@ export function AdminDashboard() {
     const token = localStorage.getItem('admin_session_token');
 
     if (!token) {
-      navigate('/admin');
+      navigate('/backstage');
       return;
     }
 
@@ -57,7 +57,7 @@ export function AdminDashboard() {
 
       if (!result.valid) {
         localStorage.removeItem('admin_session_token');
-        navigate('/admin');
+        navigate('/backstage');
         return;
       }
 
@@ -65,7 +65,7 @@ export function AdminDashboard() {
     } catch (error) {
       console.error('Auth check failed:', error);
       localStorage.removeItem('admin_session_token');
-      navigate('/admin');
+      navigate('/backstage');
     }
   };
 
@@ -95,7 +95,7 @@ export function AdminDashboard() {
 
   const handleSignOut = async () => {
     localStorage.removeItem('admin_session_token');
-    navigate('/admin');
+    navigate('/backstage');
   };
 
   return (

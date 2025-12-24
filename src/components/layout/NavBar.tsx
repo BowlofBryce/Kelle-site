@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Skull, Home, Store, Info, User } from 'lucide-react';
+import { ShoppingCart, Skull, Home, Store, Info } from 'lucide-react';
 import { useCart } from '../../hooks/useCart';
 
 export function NavBar() {
@@ -31,7 +31,6 @@ export function NavBar() {
             <NavLink to="/" icon={<Home className="w-5 h-5" />} label="Home" />
             <NavLink to="/shop" icon={<Store className="w-5 h-5" />} label="Shop" />
             <NavLink to="/about" icon={<Info className="w-5 h-5" />} label="About" />
-            <NavLink to="/admin" icon={<User className="w-5 h-5" />} label="Admin" />
 
             <Link to="/cart" className="relative">
               <motion.div
