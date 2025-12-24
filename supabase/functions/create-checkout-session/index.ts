@@ -36,12 +36,12 @@ Deno.serve(async (req: Request) => {
     }
 
     const stripe = new Stripe(stripeSecretKey, {
-      apiVersion: '2024-11-20.acacia',
+      apiVersion: '2024-11-20',
     });
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { items, customerEmail, shippingAddress } = await req.json();
+    const { items, customerEmail } = await req.json();
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return new Response(
@@ -53,8 +53,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const lineItems = [];
-    let totalCents = 0;
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+    let subtotalCents = 0;
 
     for (const item of items) {
       const { data: product } = await supabase
@@ -94,7 +94,7 @@ Deno.serve(async (req: Request) => {
           currency: 'usd',
           product_data: {
             name: variantName ? `${product.name} - ${variantName}` : product.name,
-            description: product.description,
+            description: product.description || undefined,
             images: product.thumbnail_url ? [product.thumbnail_url] : [],
           },
           unit_amount: price,
@@ -102,7 +102,33 @@ Deno.serve(async (req: Request) => {
         quantity: item.quantity,
       });
 
-      totalCents += price * item.quantity;
+      subtotalCents += price * item.quantity;
+    }
+
+    const shippingCents = subtotalCents >= 5000 ? 0 : 500;
+    const taxCents = Math.round(subtotalCents * 0.08);
+    const totalCents = subtotalCents + shippingCents + taxCents;
+
+    if (shippingCents > 0) {
+      lineItems.push({
+        price_data: {
+          currency: 'usd',
+          product_data: { name: 'Shipping' },
+          unit_amount: shippingCents,
+        },
+        quantity: 1,
+      });
+    }
+
+    if (taxCents > 0) {
+      lineItems.push({
+        price_data: {
+          currency: 'usd',
+          product_data: { name: 'Estimated Tax' },
+          unit_amount: taxCents,
+        },
+        quantity: 1,
+      });
     }
 
     const origin = req.headers.get('origin') || 'http://localhost:5173';
@@ -129,6 +155,9 @@ Deno.serve(async (req: Request) => {
         stripe_payment_id: session.payment_intent as string || null,
         status: 'pending',
         email: customerEmail || 'guest@velvethollow.com',
+        subtotal_cents: subtotalCents,
+        shipping_cents: shippingCents,
+        tax_cents: taxCents,
         total_cents: totalCents,
         currency: 'usd',
         fulfillment_status: 'pending',
@@ -200,6 +229,12 @@ Deno.serve(async (req: Request) => {
         sessionId: session.id,
         url: session.url,
         orderId: order?.id,
+        totals: {
+          subtotal_cents: subtotalCents,
+          shipping_cents: shippingCents,
+          tax_cents: taxCents,
+          total_cents: totalCents,
+        },
       }),
       {
         status: 200,

@@ -100,38 +100,45 @@ class PrintifyClient {
     );
   }
 
-  parseVariantName(variant: PrintifyVariant, options: PrintifyOption[]): { size: string; color: string } {
-    const parts = variant.title.split('/').map(s => s.trim());
+  parseVariantName(
+    variant: PrintifyVariant,
+    options: PrintifyOption[]
+  ): { size: string; color: string; optionValues: Record<string, string> } {
+    const optionValues: Record<string, string> = {};
 
-    if (parts.length === 2) {
-      return { size: parts[0], color: parts[1] };
+    for (let i = 0; i < options.length; i++) {
+      const opt = options[i];
+      const chosenValueId = variant.options?.[i];
+      const chosen = opt?.values?.find(v => v.id === chosenValueId);
+
+      if (opt?.name && chosen?.title) {
+        optionValues[opt.name] = chosen.title;
+      }
     }
 
-    const sizeOption = options.find(opt => opt.type === 'size');
-    const colorOption = options.find(opt => opt.type === 'color');
+    const sizeOpt =
+      options.find(o => o.type === 'size') ??
+      options.find(o => /size/i.test(o.name));
 
-    let size = '';
-    let color = '';
+    const colorOpt =
+      options.find(o => o.type === 'color') ??
+      options.find(o => /color/i.test(o.name));
 
-    variant.options.forEach(optionId => {
-      if (sizeOption) {
-        const sizeValue = sizeOption.values.find(v => v.id === optionId);
-        if (sizeValue) size = sizeValue.title;
-      }
-      if (colorOption) {
-        const colorValue = colorOption.values.find(v => v.id === optionId);
-        if (colorValue) color = colorValue.title;
-      }
-    });
+    const size = sizeOpt ? (optionValues[sizeOpt.name] ?? '') : '';
+    const color = colorOpt ? (optionValues[colorOpt.name] ?? '') : '';
 
-    return { size: size || 'One Size', color: color || 'Default' };
+    return {
+      size: size || 'One Size',
+      color: color || 'Default',
+      optionValues,
+    };
   }
 
   getVariantImage(variant: PrintifyVariant, images: PrintifyImage[]): string | null {
     const variantImage = images.find(img =>
-      img.variant_ids.includes(variant.id) && img.position === 'front'
+      Array.isArray(img.variant_ids) && img.variant_ids.includes(variant.id)
     );
-    return variantImage?.src || null;
+    return variantImage?.src ?? images?.[0]?.src ?? null;
   }
 }
 
@@ -188,14 +195,15 @@ Deno.serve(async (req: Request) => {
         const thumbnail = details.images?.[0]?.src || '';
         const images = details.images?.map(img => img.src) || [];
 
-        const enabledVariants = details.variants.filter(v => v.is_enabled && v.is_available);
+        const enabledVariants = details.variants.filter(v => v.is_enabled);
 
         if (enabledVariants.length === 0) {
           console.log(`No enabled variants, skipping product`);
           continue;
         }
 
-        const priceInCents = enabledVariants[0]?.price || 2999;
+        const availableVariants = enabledVariants.filter(v => v.is_available);
+        const priceInCents = (availableVariants[0] ?? enabledVariants[0])?.price || 2999;
 
         const slug = details.title
           .toLowerCase()
@@ -235,15 +243,18 @@ Deno.serve(async (req: Request) => {
 
         const variantsToUpsert = enabledVariants.map(variant => {
           const previewUrl = printify.getVariantImage(variant, details.images);
-          const { size, color } = printify.parseVariantName(variant, details.options);
+          const { size, color, optionValues } = printify.parseVariantName(variant, details.options);
 
           return {
             product_id: upsertedProduct.id,
             printify_variant_id: variant.id.toString(),
             name: `${size} / ${color}`,
+            size,
+            color,
+            option_values: optionValues,
             sku: variant.sku || `${productSummary.id}-${variant.id}`,
             price_cents: variant.price,
-            available: variant.is_available && variant.is_enabled,
+            available: !!(variant.is_enabled && variant.is_available),
             stock: variant.is_available ? 100 : 0,
             preview_url: previewUrl || thumbnail,
           };
@@ -259,11 +270,22 @@ Deno.serve(async (req: Request) => {
           console.log(`Synced ${variantsToUpsert.length} variants`);
         }
 
-        await supabase
+        const syncedVariantIds = enabledVariants.map(v => v.id.toString());
+        const { data: existingVariants } = await supabase
           .from('variants')
-          .delete()
-          .eq('product_id', upsertedProduct.id)
-          .not('printify_variant_id', 'in', `(${enabledVariants.map(v => v.id).join(',')})`);
+          .select('id, printify_variant_id')
+          .eq('product_id', upsertedProduct.id);
+
+        if (existingVariants) {
+          const staleVariants = existingVariants.filter(
+            ev => ev.printify_variant_id && !syncedVariantIds.includes(ev.printify_variant_id)
+          );
+          if (staleVariants.length > 0) {
+            const staleIds = staleVariants.map(v => v.id);
+            await supabase.from('variants').delete().in('id', staleIds);
+            console.log(`Deleted ${staleVariants.length} stale variants`);
+          }
+        }
 
       } catch (error) {
         console.error(`Error processing product ${productSummary.title}:`, error);
