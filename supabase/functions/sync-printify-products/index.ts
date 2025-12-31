@@ -133,8 +133,8 @@ Deno.serve(async (req: Request) => {
             option_values: optionValues,
             sku: variant.sku || `${productSummary.id}-${variant.id}`,
             price_cents: variant.price,
-            available: !!(variant.is_enabled && variant.is_available),
-            stock: variant.is_available ? 100 : 0,
+            available: true,
+            stock: 100,
             preview_url: previewUrl || thumbnail,
           };
         });
