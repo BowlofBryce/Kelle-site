@@ -1,4 +1,4 @@
-import type { Variants } from 'framer-motion';
+import type { TargetAndTransition, Variants } from 'framer-motion';
 
 export const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 20 },
@@ -61,7 +61,7 @@ export const cardHover = {
   transition: { type: 'spring', stiffness: 90, damping: 14 }
 };
 
-export const glowPulse = {
+export const glowPulse: TargetAndTransition = {
   boxShadow: [
     '0 0 20px rgba(255, 0, 150, 0.3)',
     '0 0 40px rgba(255, 0, 150, 0.6)',
@@ -74,7 +74,7 @@ export const glowPulse = {
   }
 };
 
-export const breathingScale = {
+export const breathingScale: TargetAndTransition = {
   scale: [1, 1.02, 1],
   transition: {
     duration: 3,

@@ -195,15 +195,16 @@ Deno.serve(async (req: Request) => {
         const thumbnail = details.images?.[0]?.src || '';
         const images = details.images?.map(img => img.src) || [];
 
-        const enabledVariants = details.variants.filter(v => v.is_enabled);
+        const enabledVariants = details.variants.filter(
+          v => v.is_enabled && v.is_available
+        );
 
         if (enabledVariants.length === 0) {
           console.log(`No enabled variants, skipping product`);
           continue;
         }
 
-        const availableVariants = enabledVariants.filter(v => v.is_available);
-        const priceInCents = (availableVariants[0] ?? enabledVariants[0])?.price || 2999;
+        const priceInCents = enabledVariants[0]?.price || 2999;
 
         const slug = details.title
           .toLowerCase()
@@ -263,8 +264,8 @@ Deno.serve(async (req: Request) => {
             option_values: optionValues,
             sku: variant.sku || `${productSummary.id}-${variant.id}`,
             price_cents: variant.price,
-            available: !!(variant.is_enabled && variant.is_available),
-            stock: variant.is_available ? 100 : 0,
+            available: true,
+            stock: 100,
             preview_url: previewUrl || thumbnail,
           };
         });

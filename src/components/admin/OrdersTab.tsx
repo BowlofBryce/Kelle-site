@@ -2,9 +2,7 @@ import { motion } from 'framer-motion';
 import { useState } from 'react';
 import {
   Package,
-  Truck,
   CheckCircle,
-  XCircle,
   ChevronDown,
   ChevronUp,
   Send,
