@@ -18,6 +18,7 @@ export interface PrintifyOption {
     id: number;
     title: string;
     colors?: string[];
+    hex_colors?: string[];
   }>;
 }
 
@@ -67,68 +68,128 @@ export class PrintifyClient {
   }
 
   private async fetch<T>(endpoint: string): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+    return this.fetchWithRetry<T>(endpoint, { method: 'GET' });
+  }
 
+  private async fetchWithRetry<T>(
+    endpoint: string,
+    init: RequestInit = {},
+    attempt = 0,
+    maxAttempts = 5
+  ): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
+      ...init,
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
+        ...init.headers,
       },
     });
 
-    if (!response.ok) {
+    if (response.ok) {
       const text = await response.text();
-      console.error(`Printify API Error: ${response.status} - ${text}`);
-      throw new Error(`Printify API request failed: ${response.status} ${response.statusText}`);
+      return text ? JSON.parse(text) : (undefined as unknown as T);
     }
 
-    return response.json();
+    const shouldRetry =
+      response.status === 429 ||
+      (response.status >= 500 && response.status < 600);
+
+    if (shouldRetry && attempt < maxAttempts - 1) {
+      const retryAfter = parseFloat(response.headers.get('Retry-After') || '0');
+      const backoff = Math.min(1000 * 2 ** attempt, 8000);
+      const jitter = Math.random() * 250;
+      const delay = retryAfter > 0 ? retryAfter * 1000 : backoff + jitter;
+      console.warn(`Printify API retry ${attempt + 1}/${maxAttempts} after ${delay}ms (status ${response.status})`);
+      await new Promise(r => setTimeout(r, delay));
+      return this.fetchWithRetry<T>(endpoint, init, attempt + 1, maxAttempts);
+    }
+
+    const errorText = await response.text();
+    console.error(`Printify API Error: ${response.status} - ${errorText}`);
+    throw new Error(`Printify API request failed: ${response.status} ${response.statusText}`);
   }
 
-  async getProducts(): Promise<PrintifyProductSummary[]> {
-    const data = await this.fetch<{ data: PrintifyProductSummary[] }>(
-      `/shops/${this.shopId}/products.json`
-    );
-    return data.data;
+  async getProductsPaginated(limit = 100): Promise<PrintifyProductSummary[]> {
+    const results: PrintifyProductSummary[] = [];
+    let page = 1;
+    while (true) {
+      const data = await this.fetchWithRetry<{ data: PrintifyProductSummary[] }>(
+        `/shops/${this.shopId}/products.json?page=${page}&limit=${limit}`,
+        { method: 'GET' }
+      );
+      const pageData = data.data || [];
+      results.push(...pageData);
+      if (pageData.length < limit) break;
+      page += 1;
+    }
+    return results;
   }
 
   async getProduct(productId: string): Promise<PrintifyProduct> {
-    return this.fetch<PrintifyProduct>(
-      `/shops/${this.shopId}/products/${productId}.json`
+    return this.fetchWithRetry<PrintifyProduct>(
+      `/shops/${this.shopId}/products/${productId}.json`,
+      { method: 'GET' }
     );
   }
 
-  parseVariantName(variant: PrintifyVariant, options: PrintifyOption[]): { size: string; color: string } {
-    const parts = variant.title.split('/').map(s => s.trim());
-
-    if (parts.length === 2) {
-      return { size: parts[0], color: parts[1] };
-    }
-
-    const sizeOption = options.find(opt => opt.type === 'size');
-    const colorOption = options.find(opt => opt.type === 'color');
-
-    let size = '';
-    let color = '';
-
-    variant.options.forEach(optionId => {
-      if (sizeOption) {
-        const sizeValue = sizeOption.values.find(v => v.id === optionId);
-        if (sizeValue) size = sizeValue.title;
-      }
-      if (colorOption) {
-        const colorValue = colorOption.values.find(v => v.id === optionId);
-        if (colorValue) color = colorValue.title;
-      }
+  parseVariantName(
+    variant: PrintifyVariant,
+    options: PrintifyOption[]
+  ): { size: string; color: string; optionValues: Record<string, string> } {
+    const optionLookup = new Map<number, { title: string; name: string; type: string }>();
+    options.forEach(opt => {
+      opt.values.forEach(v => optionLookup.set(v.id, { title: v.title, name: opt.name, type: opt.type }));
     });
 
-    return { size: size || 'One Size', color: color || 'Default' };
+    const optionValues: Record<string, string> = {};
+    variant.options.forEach(id => {
+      const found = optionLookup.get(id);
+      if (found) optionValues[found.name] = found.title;
+    });
+
+    const sizeOpt =
+      options.find(o => o.type === 'size') ??
+      options.find(o => /size/i.test(o.name));
+    const colorOpt =
+      options.find(o => o.type === 'color') ??
+      options.find(o => /color/i.test(o.name));
+
+    const size = sizeOpt ? (optionValues[sizeOpt.name] ?? '') : '';
+    const color = colorOpt ? (optionValues[colorOpt.name] ?? '') : '';
+
+    return {
+      size: size || 'One Size',
+      color: color || 'Default',
+      optionValues,
+    };
   }
 
   getVariantImage(variant: PrintifyVariant, images: PrintifyImage[]): string | null {
     const variantImage = images.find(img =>
-      img.variant_ids.includes(variant.id) && img.position === 'front'
+      Array.isArray(img.variant_ids) && img.variant_ids.includes(variant.id) && img.position === 'front'
     );
-    return variantImage?.src || null;
+    const anyVariantImage = images.find(img =>
+      Array.isArray(img.variant_ids) && img.variant_ids.includes(variant.id)
+    );
+    return variantImage?.src || anyVariantImage?.src || images?.[0]?.src || null;
+  }
+
+  async markPublishingSucceeded(productId: string) {
+    await this.fetchWithRetry(
+      `/shops/${this.shopId}/products/${productId}/publishing_succeeded.json`,
+      { method: 'POST' }
+    );
+  }
+
+  async markPublishingFailed(productId: string, reason: string) {
+    await this.fetchWithRetry(
+      `/shops/${this.shopId}/products/${productId}/publishing_failed.json`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }
+    );
   }
 }
