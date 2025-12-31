@@ -99,11 +99,16 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      lineItems.push({
+      const lineItem: any = {
         product_id: product.printify_id,
-        variant_id: printifyVariantId ? parseInt(printifyVariantId) : undefined,
         quantity: item.quantity,
-      });
+      };
+
+      if (printifyVariantId) {
+        lineItem.variant_id = parseInt(printifyVariantId);
+      }
+
+      lineItems.push(lineItem);
     }
 
     if (lineItems.length === 0) {
@@ -116,15 +121,19 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const nameParts = order.customer_name?.split(' ') || [];
+    const firstName = nameParts[0] || 'Customer';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
     const printifyOrderData = {
       external_id: order.id,
-      label: `The Velvet Hollow - Order ${order.id.slice(0, 8)}`,
+      label: `Order ${order.id.slice(0, 8)}`,
       line_items: lineItems,
       shipping_method: 1,
       send_shipping_notification: true,
       address_to: {
-        first_name: order.customer_name?.split(' ')[0] || 'Customer',
-        last_name: order.customer_name?.split(' ').slice(1).join(' ') || '',
+        first_name: firstName,
+        last_name: lastName,
         email: order.email,
         phone: order.customer_phone || '',
         country: address.country || 'US',
@@ -136,11 +145,11 @@ Deno.serve(async (req: Request) => {
       },
     };
 
-    console.log('Creating Printify order with data:', JSON.stringify({
-      external_id: printifyOrderData.external_id,
-      line_items_count: lineItems.length,
-      address_to: printifyOrderData.address_to,
-    }));
+    console.log('Creating Printify order');
+    console.log('External ID:', printifyOrderData.external_id);
+    console.log('Line items:', lineItems.length);
+    console.log('Address:', JSON.stringify(printifyOrderData.address_to));
+    console.log('Full order data:', JSON.stringify(printifyOrderData, null, 2));
 
     const printifyResponse = await fetch(
       `https://api.printify.com/v1/shops/${printifyShopId}/orders.json`,
