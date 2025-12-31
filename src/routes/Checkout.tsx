@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, AlertCircle, Lock, Mail, User } from 'lucide-react';
+import { CreditCard, AlertCircle, Lock, Mail } from 'lucide-react';
 import { useCart } from '../hooks/useCart';
 import { supabase } from '../lib/supabase';
 import { AnimatedButton } from '../components/ui/AnimatedButton';
@@ -11,6 +11,7 @@ export function Checkout() {
   const { items, totalCents, clearCart } = useCart();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -41,6 +42,7 @@ export function Checkout() {
             quantity: item.quantity,
           })),
           customerEmail: email,
+          customerName: name || undefined,
         }),
       });
 
@@ -162,6 +164,20 @@ export function Checkout() {
               <p className="text-red-400 text-sm">{error}</p>
             </motion.div>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Full Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              required
+              className="w-full px-4 py-3 bg-black/60 border-2 border-pink-500/40 rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:border-pink-500 transition-colors"
+              placeholder="Your name"
+            />
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">

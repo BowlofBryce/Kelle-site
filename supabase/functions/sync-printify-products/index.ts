@@ -1,146 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-
-interface PrintifyVariant {
-  id: number;
-  sku: string;
-  cost: number;
-  price: number;
-  title: string;
-  grams: number;
-  is_enabled: boolean;
-  is_default: boolean;
-  is_available: boolean;
-  options: number[];
-}
-
-interface PrintifyOption {
-  name: string;
-  type: string;
-  values: Array<{
-    id: number;
-    title: string;
-    colors?: string[];
-  }>;
-}
-
-interface PrintifyImage {
-  src: string;
-  variant_ids: number[];
-  position: string;
-  is_default: boolean;
-}
-
-interface PrintifyProduct {
-  id: string;
-  title: string;
-  description: string;
-  tags: string[];
-  options: PrintifyOption[];
-  variants: PrintifyVariant[];
-  images: PrintifyImage[];
-  created_at: string;
-  updated_at: string;
-  visible: boolean;
-  is_locked: boolean;
-  blueprint_id: number;
-  user_id: number;
-  shop_id: number;
-  print_provider_id: number;
-}
-
-interface PrintifyProductSummary {
-  id: string;
-  title: string;
-  description: string;
-  tags: string[];
-  created_at: string;
-  updated_at: string;
-  visible: boolean;
-}
-
-class PrintifyClient {
-  private apiKey: string;
-  private shopId: string;
-  private baseUrl = 'https://api.printify.com/v1';
-
-  constructor(apiKey: string, shopId: string) {
-    this.apiKey = apiKey;
-    this.shopId = shopId;
-  }
-
-  private async fetch<T>(endpoint: string): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
-
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error(`Printify API Error: ${response.status} - ${text}`);
-      throw new Error(`Printify API request failed: ${response.status} ${response.statusText}`);
-    }
-
-    return response.json();
-  }
-
-  async getProducts(): Promise<PrintifyProductSummary[]> {
-    const data = await this.fetch<{ data: PrintifyProductSummary[] }>(
-      `/shops/${this.shopId}/products.json`
-    );
-    return data.data;
-  }
-
-  async getProduct(productId: string): Promise<PrintifyProduct> {
-    return this.fetch<PrintifyProduct>(
-      `/shops/${this.shopId}/products/${productId}.json`
-    );
-  }
-
-  parseVariantName(
-    variant: PrintifyVariant,
-    options: PrintifyOption[]
-  ): { size: string; color: string; optionValues: Record<string, string> } {
-    const optionValues: Record<string, string> = {};
-
-    for (let i = 0; i < options.length; i++) {
-      const opt = options[i];
-      const chosenValueId = variant.options?.[i];
-      const chosen = opt?.values?.find(v => v.id === chosenValueId);
-
-      if (opt?.name && chosen?.title) {
-        optionValues[opt.name] = chosen.title;
-      }
-    }
-
-    const sizeOpt =
-      options.find(o => o.type === 'size') ??
-      options.find(o => /size/i.test(o.name));
-
-    const colorOpt =
-      options.find(o => o.type === 'color') ??
-      options.find(o => /color/i.test(o.name));
-
-    const size = sizeOpt ? (optionValues[sizeOpt.name] ?? '') : '';
-    const color = colorOpt ? (optionValues[colorOpt.name] ?? '') : '';
-
-    return {
-      size: size || 'One Size',
-      color: color || 'Default',
-      optionValues,
-    };
-  }
-
-  getVariantImage(variant: PrintifyVariant, images: PrintifyImage[]): string | null {
-    const variantImage = images.find(img =>
-      Array.isArray(img.variant_ids) && img.variant_ids.includes(variant.id)
-    );
-    return variantImage?.src ?? images?.[0]?.src ?? null;
-  }
-}
+import { PrintifyClient } from '../_shared/printifyClient.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -181,10 +40,11 @@ Deno.serve(async (req: Request) => {
 
     console.log('Starting Printify product sync...');
 
-    const productList = await printify.getProducts();
-    console.log(`Found ${productList.length} products from Printify`);
+    const productList = await printify.getProductsPaginated();
+    console.log(`Found ${productList.length} products from Printify (paginated)`);
 
-    const syncedProducts = [];
+    const syncedProducts: { id: string; printify_id: string }[] = [];
+    const pendingImages: string[] = [];
 
     for (const productSummary of productList) {
       try {
@@ -192,18 +52,25 @@ Deno.serve(async (req: Request) => {
 
         const details = await printify.getProduct(productSummary.id);
 
+        if (!details.images || details.images.length === 0) {
+          console.warn(`Product ${productSummary.id} has no images yet; will retry on next sync`);
+          pendingImages.push(productSummary.id);
+          continue;
+        }
+
         const thumbnail = details.images?.[0]?.src || '';
         const images = details.images?.map(img => img.src) || [];
 
-        const enabledVariants = details.variants.filter(v => v.is_enabled);
+        const enabledVariants = details.variants.filter(
+          v => v.is_enabled && v.is_available
+        );
 
         if (enabledVariants.length === 0) {
           console.log(`No enabled variants, skipping product`);
           continue;
         }
 
-        const availableVariants = enabledVariants.filter(v => v.is_available);
-        const priceInCents = (availableVariants[0] ?? enabledVariants[0])?.price || 2999;
+        const priceInCents = enabledVariants[0]?.price || 2999;
 
         const slug = details.title
           .toLowerCase()
@@ -212,18 +79,20 @@ Deno.serve(async (req: Request) => {
 
         const { data: existingProduct } = await supabase
           .from('products')
-          .select('id, active, featured')
+          .select('id, active, featured, publish_state')
           .eq('printify_id', productSummary.id)
           .maybeSingle();
 
         const resolvedActive = existingProduct?.active ?? true;
         const resolvedFeatured = existingProduct?.featured ?? false;
+        const resolvedPublishState = existingProduct?.publish_state ?? 'published';
 
         const { data: upsertedProduct, error: upsertError } = await supabase
           .from('products')
           .upsert(
             {
               printify_id: productSummary.id,
+              printify_shop_id: details.shop_id?.toString?.() || printifyShopId,
               name: details.title,
               slug: slug,
               description: details.description || '',
@@ -232,6 +101,7 @@ Deno.serve(async (req: Request) => {
               images: images,
               active: resolvedActive,
               featured: resolvedFeatured,
+              publish_state: resolvedPublishState,
               category: 'merch',
               updated_at: new Date().toISOString(),
             },
@@ -309,6 +179,7 @@ Deno.serve(async (req: Request) => {
         success: true,
         synced: syncedProducts.length,
         products: syncedProducts,
+        pendingImages,
       }),
       {
         status: 200,

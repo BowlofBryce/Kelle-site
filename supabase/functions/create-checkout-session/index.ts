@@ -20,7 +20,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!;
     const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
 
     if (!stripeSecretKey || stripeSecretKey === 'your_stripe_secret_key_here') {
@@ -41,7 +41,7 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { items, customerEmail } = await req.json();
+    const { items, customerEmail, customerName } = await req.json();
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return new Response(
@@ -140,6 +140,7 @@ Deno.serve(async (req: Request) => {
       success_url: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/checkout/cancel`,
       customer_email: customerEmail,
+      customer_details: customerName ? { name: customerName, email: customerEmail } : undefined,
       shipping_address_collection: {
         allowed_countries: ['US', 'CA', 'GB', 'AU'],
       },
@@ -155,6 +156,7 @@ Deno.serve(async (req: Request) => {
         stripe_payment_id: session.payment_intent as string || null,
         status: 'pending',
         email: customerEmail || 'guest@velvethollow.com',
+        customer_name: customerName || null,
         subtotal_cents: subtotalCents,
         shipping_cents: shippingCents,
         tax_cents: taxCents,
