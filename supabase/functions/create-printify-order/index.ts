@@ -6,14 +6,55 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
+const COUNTRY_CODE_MAP: Record<string, string> = {
+  'United States': 'US',
+  'Canada': 'CA',
+  'United Kingdom': 'GB',
+  'Australia': 'AU',
+  'Germany': 'DE',
+  'France': 'FR',
+  'Italy': 'IT',
+  'Spain': 'ES',
+  'Netherlands': 'NL',
+  'Belgium': 'BE',
+  'Austria': 'AT',
+  'Switzerland': 'CH',
+  'Sweden': 'SE',
+  'Denmark': 'DK',
+  'Norway': 'NO',
+  'Finland': 'FI',
+  'Poland': 'PL',
+  'Ireland': 'IE',
+  'Portugal': 'PT',
+  'Greece': 'GR',
+  'Czech Republic': 'CZ',
+  'New Zealand': 'NZ',
+  'Singapore': 'SG',
+  'Japan': 'JP',
+  'Mexico': 'MX',
+  'Brazil': 'BR',
+};
+
+function getCountryCode(country: string | undefined): string {
+  if (!country) return 'US';
+
+  if (country.length === 2) {
+    return country.toUpperCase();
+  }
+
+  return COUNTRY_CODE_MAP[country] || country.toUpperCase().slice(0, 2);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  let orderId: string | null = null;
+
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const printifyToken = Deno.env.get('PRINTIFY_API_TOKEN');
     const printifyShopId = Deno.env.get('PRINTIFY_SHOP_ID');
 
@@ -36,7 +77,8 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { orderId } = await req.json();
+    const body = await req.json();
+    orderId = body.orderId;
 
     if (!orderId) {
       return new Response(
@@ -78,20 +120,15 @@ Deno.serve(async (req: Request) => {
     const lineItems = [];
 
     for (const item of order.order_items || []) {
-      const { data: product } = await supabase
+      const { data: product, error: productError } = await supabase
         .from('products')
         .select('printify_id')
         .eq('id', item.product_id)
-        .single();
+        .maybeSingle();
 
-      let printifyVariantId = null;
-      if (item.variant_id) {
-        const { data: variant } = await supabase
-          .from('variants')
-          .select('printify_variant_id')
-          .eq('id', item.variant_id)
-          .single();
-        printifyVariantId = variant?.printify_variant_id;
+      if (productError) {
+        console.error(`Error fetching product ${item.product_id}:`, productError);
+        continue;
       }
 
       if (!product?.printify_id) {
@@ -99,11 +136,36 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      lineItems.push({
+      let printifyVariantId = null;
+      if (item.variant_id) {
+        const { data: variant, error: variantError } = await supabase
+          .from('variants')
+          .select('printify_variant_id')
+          .eq('id', item.variant_id)
+          .maybeSingle();
+
+        if (variantError) {
+          console.error(`Error fetching variant ${item.variant_id}:`, variantError);
+        }
+
+        printifyVariantId = variant?.printify_variant_id;
+
+        if (!printifyVariantId) {
+          console.error(`Variant ${item.variant_id} has no Printify variant ID`);
+          throw new Error(`Missing Printify variant ID for variant ${item.variant_id}`);
+        }
+      }
+
+      const lineItem: any = {
         product_id: product.printify_id,
-        variant_id: printifyVariantId ? parseInt(printifyVariantId) : undefined,
         quantity: item.quantity,
-      });
+      };
+
+      if (printifyVariantId) {
+        lineItem.variant_id = parseInt(printifyVariantId);
+      }
+
+      lineItems.push(lineItem);
     }
 
     if (lineItems.length === 0) {
@@ -116,31 +178,60 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const nameParts = order.customer_name?.split(' ') || [];
+    const firstName = nameParts[0] || 'Customer';
+    const lastName = nameParts.slice(1).join(' ') || 'Customer';
+
+    const countryCode = getCountryCode(address.country);
+    const region = address.state || address.region || '';
+    const address1 = address.line1 || address.address1 || '';
+    const city = address.city || '';
+    const zip = address.postal_code || address.zip || '';
+
+    if (!order.email) {
+      throw new Error('Customer email is required');
+    }
+
+    if (!address1 || !city || !zip) {
+      const missing = [];
+      if (!address1) missing.push('street address');
+      if (!city) missing.push('city');
+      if (!zip) missing.push('postal code');
+      throw new Error(`Missing required address fields: ${missing.join(', ')}`);
+    }
+
     const printifyOrderData = {
       external_id: order.id,
-      label: `The Velvet Hollow - Order ${order.id.slice(0, 8)}`,
+      label: `Order ${order.id.slice(0, 8)}`,
       line_items: lineItems,
       shipping_method: 1,
       send_shipping_notification: true,
       address_to: {
-        first_name: order.customer_name?.split(' ')[0] || 'Customer',
-        last_name: order.customer_name?.split(' ').slice(1).join(' ') || '',
+        first_name: firstName,
+        last_name: lastName,
         email: order.email,
         phone: order.customer_phone || '',
-        country: address.country || 'US',
-        region: address.state || address.region || '',
-        address1: address.line1 || address.address1 || '',
+        country: countryCode,
+        region: region,
+        address1: address1,
         address2: address.line2 || address.address2 || '',
-        city: address.city || '',
-        zip: address.postal_code || address.zip || '',
+        city: city,
+        zip: zip,
       },
     };
 
-    console.log('Creating Printify order with data:', JSON.stringify({
-      external_id: printifyOrderData.external_id,
-      line_items_count: lineItems.length,
-      address_to: printifyOrderData.address_to,
-    }));
+    console.log('=== CREATING PRINTIFY ORDER ===');
+    console.log('Order ID:', order.id);
+    console.log('External ID:', printifyOrderData.external_id);
+    console.log('Line items count:', lineItems.length);
+    console.log('Line items:', JSON.stringify(lineItems, null, 2));
+    console.log('Shipping address:');
+    console.log('  Name:', `${firstName} ${lastName}`);
+    console.log('  Email:', order.email);
+    console.log('  Phone:', order.customer_phone || '(none)');
+    console.log('  Country:', countryCode);
+    console.log('  Address:', address1);
+    console.log('  City/State/Zip:', `${city}, ${region} ${zip}`);
 
     const printifyResponse = await fetch(
       `https://api.printify.com/v1/shops/${printifyShopId}/orders.json`,
@@ -211,6 +302,27 @@ Deno.serve(async (req: Request) => {
     );
   } catch (error) {
     console.error('Error creating Printify order:', error);
+
+    if (orderId) {
+      try {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        await supabase
+          .from('orders')
+          .update({
+            fulfillment_status: 'failed',
+            metadata: {
+              error_type: 'validation_error',
+              error_message: error.message,
+              error_timestamp: new Date().toISOString(),
+            },
+          })
+          .eq('id', orderId);
+      } catch (dbError) {
+        console.error('Failed to update order status:', dbError);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         error: error.message || 'Failed to create Printify order',

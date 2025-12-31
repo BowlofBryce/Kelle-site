@@ -36,7 +36,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const stripe = new Stripe(stripeSecretKey, {
-      apiVersion: '2024-11-20',
+      apiVersion: '2023-10-16',
     });
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -139,8 +139,7 @@ Deno.serve(async (req: Request) => {
       mode: 'payment',
       success_url: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/checkout/cancel`,
-      customer_email: customerEmail,
-      customer_details: customerName ? { name: customerName, email: customerEmail } : undefined,
+      customer_email: customerEmail || undefined,
       shipping_address_collection: {
         allowed_countries: ['US', 'CA', 'GB', 'AU'],
       },

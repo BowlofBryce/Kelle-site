@@ -78,6 +78,15 @@ export class PrintifyClient {
     maxAttempts = 5
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    console.log(`Printify API Request: ${init.method || 'GET'} ${url}`);
+
+  private async fetchWithRetry<T>(
+    endpoint: string,
+    init: RequestInit = {},
+    attempt = 0,
+    maxAttempts = 5
+  ): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
       ...init,
       headers: {
@@ -107,11 +116,15 @@ export class PrintifyClient {
     }
 
     const errorText = await response.text();
-    console.error(`Printify API Error: ${response.status} - ${errorText}`);
-    throw new Error(`Printify API request failed: ${response.status} ${response.statusText}`);
+    console.error(`Printify API Error Details:`);
+    console.error(`  URL: ${url}`);
+    console.error(`  Status: ${response.status} ${response.statusText}`);
+    console.error(`  Response: ${errorText}`);
+    console.error(`  Shop ID: ${this.shopId}`);
+    throw new Error(`Printify API request failed: ${response.status} ${response.statusText} - ${errorText}`);
   }
 
-  async getProductsPaginated(limit = 100): Promise<PrintifyProductSummary[]> {
+  async getProductsPaginated(limit = 50): Promise<PrintifyProductSummary[]> {
     const results: PrintifyProductSummary[] = [];
     let page = 1;
     while (true) {
