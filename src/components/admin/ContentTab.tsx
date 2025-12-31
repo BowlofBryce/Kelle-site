@@ -5,12 +5,6 @@ import { supabase } from '../../lib/supabase';
 import { AnimatedButton } from '../ui/AnimatedButton';
 import { fadeInUp } from '../../lib/animations';
 
-interface SiteContent {
-  key: string;
-  value: any;
-  description: string;
-}
-
 export function ContentTab() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

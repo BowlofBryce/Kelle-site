@@ -92,13 +92,15 @@ export function ProductsTab({ products, onRefresh }: ProductsTabProps) {
       if (editingProduct) {
         const { error } = await supabase
           .from('products')
-          .update(formData)
+          .update(formData as Database['public']['Tables']['products']['Update'])
           .eq('id', editingProduct.id);
 
         if (error) throw error;
         alert('Product updated successfully!');
       } else if (isCreating) {
-        const { error } = await supabase.from('products').insert([formData]);
+        const { error } = await supabase
+          .from('products')
+          .insert([formData as Database['public']['Tables']['products']['Insert']]);
 
         if (error) throw error;
         alert('Product created successfully!');

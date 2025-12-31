@@ -1,12 +1,10 @@
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import {
-  BarChart3,
   ShoppingBag,
   Package,
   TrendingUp,
   DollarSign,
-  Users,
   Calendar,
   RefreshCw,
 } from 'lucide-react';
