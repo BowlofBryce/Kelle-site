@@ -55,18 +55,28 @@ export function ProductDetail() {
       if (!isMounted) return;
       setProduct(prod);
 
-      // ✅ IMPORTANT FIX:
-      // Do NOT filter by available=true here. That hides most Printify variants.
-      // Fetch all variants and allow UI to disable out-of-stock combinations.
+      // Fetch only variants marked available; if none are returned (legacy data),
+      // fall back to all variants so the UI can still render.
       const { data: vars } = await supabase
         .from('variants')
         .select('*')
-        .eq('product_id', prod.id);
+        .eq('product_id', prod.id)
+        .eq('available', true);
+
+      let variantsToUse = vars || [];
+
+      if (variantsToUse.length === 0) {
+        const { data: allVars } = await supabase
+          .from('variants')
+          .select('*')
+          .eq('product_id', prod.id);
+        variantsToUse = allVars || [];
+      }
 
       if (!isMounted) return;
 
-      const allVariants = vars || [];
-      setVariants(allVariants);
+      const allVariants = variantsToUse;
+      setVariants(variantsToUse);
 
       const organized = organizeVariants(allVariants);
 
