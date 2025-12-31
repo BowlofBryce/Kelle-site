@@ -115,7 +115,7 @@ class PrintifyClient {
     throw new Error(`Printify API request failed: ${response.status} ${response.statusText} - ${errorText}`);
   }
 
-  async getProductsPaginated(limit = 100): Promise<PrintifyProductSummary[]> {
+  async getProductsPaginated(limit = 50): Promise<PrintifyProductSummary[]> {
     const results: PrintifyProductSummary[] = [];
     let page = 1;
     while (true) {
