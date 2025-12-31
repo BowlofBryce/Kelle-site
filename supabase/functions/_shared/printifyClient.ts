@@ -80,6 +80,13 @@ export class PrintifyClient {
     const url = `${this.baseUrl}${endpoint}`;
     console.log(`Printify API Request: ${init.method || 'GET'} ${url}`);
 
+  private async fetchWithRetry<T>(
+    endpoint: string,
+    init: RequestInit = {},
+    attempt = 0,
+    maxAttempts = 5
+  ): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
       ...init,
       headers: {

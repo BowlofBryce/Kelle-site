@@ -299,6 +299,7 @@ export interface Database {
           active?: boolean
           featured?: boolean
           category?: string | null
+          publish_state?: string | null
           created_at?: string
           updated_at?: string
         }
