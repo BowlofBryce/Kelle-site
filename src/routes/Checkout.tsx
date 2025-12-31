@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, AlertCircle, Lock, Mail, User } from 'lucide-react';
+import { CreditCard, AlertCircle, Lock, Mail } from 'lucide-react';
 import { useCart } from '../hooks/useCart';
 import { supabase } from '../lib/supabase';
 import { AnimatedButton } from '../components/ui/AnimatedButton';

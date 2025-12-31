@@ -25,9 +25,21 @@ export function Home() {
         .eq('active', true)
         .eq('featured', true)
         .not('printify_id', 'is', null)
+        .order('updated_at', { ascending: false })
         .limit(8);
 
-      if (products) setFeaturedProducts(products);
+      if (products?.length) {
+        setFeaturedProducts(products);
+      } else {
+        const { data: fallbackProducts } = await supabase
+          .from('products')
+          .select('*')
+          .eq('active', true)
+          .not('printify_id', 'is', null)
+          .order('updated_at', { ascending: false })
+          .limit(8);
+        if (fallbackProducts) setFeaturedProducts(fallbackProducts);
+      }
 
       const { data: hero } = await supabase
         .from('editable_sections')
