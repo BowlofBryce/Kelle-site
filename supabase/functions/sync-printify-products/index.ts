@@ -17,6 +17,8 @@ Deno.serve(async (req: Request) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const printifyToken = Deno.env.get('PRINTIFY_API_TOKEN');
     const printifyShopId = Deno.env.get('PRINTIFY_SHOP_ID');
+    const siteUrl =
+      (Deno.env.get('PUBLIC_SITE_URL') || Deno.env.get('SITE_URL') || '').replace(/\/+$/, '');
 
     if (
       !printifyToken ||

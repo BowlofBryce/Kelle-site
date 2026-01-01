@@ -208,7 +208,8 @@ export class PrintifyClient {
     return variantImage?.src || anyVariantImage?.src || images?.[0]?.src || null;
   }
 
-  async markPublishingSucceeded(productId: string) {
+  async markPublishingSucceeded(productId: string, externalHandle?: string) {
+    const body = externalHandle ? { external: { handle: externalHandle } } : {};
     await this.fetchWithRetry(
       `/shops/${this.shopId}/products/${productId}/publishing_succeeded.json`,
       {
