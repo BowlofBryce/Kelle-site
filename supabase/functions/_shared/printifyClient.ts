@@ -139,6 +139,9 @@ export class PrintifyClient {
     );
   }
 
+  private logAckResult(productId: string, action: 'succeeded' | 'failed', handle?: string) {
+    const handleInfo = handle ? ` (handle: ${handle})` : '';
+    console.log(`Printify publishing_${action} acknowledged for product ${productId}${handleInfo}`);
   private logAckResult(productId: string, action: 'succeeded' | 'failed') {
     console.log(`Printify publishing_${action} acknowledged for product ${productId}`);
   }
