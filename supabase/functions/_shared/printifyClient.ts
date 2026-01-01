@@ -75,7 +75,6 @@ export class PrintifyClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     console.log(`Printify API Request: ${init.method || 'GET'} ${url}`);
-
     const response = await fetch(url, {
       ...init,
       headers: {
@@ -126,6 +125,13 @@ export class PrintifyClient {
 
   async getProduct(productId: string): Promise<PrintifyProduct> {
     return this.fetchWithRetry<PrintifyProduct>(`/shops/${this.shopId}/products/${productId}.json`, { method: 'GET' });
+  }
+
+  private logAckResult(productId: string, action: 'succeeded' | 'failed', handle?: string) {
+    const handleInfo = handle ? ` (handle: ${handle})` : '';
+    console.log(`Printify publishing_${action} acknowledged for product ${productId}${handleInfo}`);
+  private logAckResult(productId: string, action: 'succeeded' | 'failed') {
+    console.log(`Printify publishing_${action} acknowledged for product ${productId}`);
   }
 
   parseVariantName(
@@ -184,18 +190,16 @@ export class PrintifyClient {
     return variantImageFront?.src || anyVariantImage?.src || images?.[0]?.src || null;
   }
 
-  // Keep these available for true “custom store publish” flows, but DO NOT call them from sync.
-  async markPublishingSucceeded(
-    productId: string,
-    external?: { id?: string; handle?: string }
-  ) {
+  async markPublishingSucceeded(productId: string, externalHandle?: string) {
+    const body = externalHandle ? { external: { handle: externalHandle } } : {};
     await this.fetchWithRetry(
       `/shops/${this.shopId}/products/${productId}/publishing_succeeded.json`,
       {
         method: 'POST',
-        body: JSON.stringify(external ? { external } : {}),
+        body: JSON.stringify({}), // ensure Printify sees an explicit body
       }
     );
+    this.logAckResult(productId, 'succeeded');
   }
 
   async markPublishingFailed(productId: string, reason: string) {
@@ -206,5 +210,6 @@ export class PrintifyClient {
         body: JSON.stringify({ reason }),
       }
     );
+    this.logAckResult(productId, 'failed');
   }
 }
