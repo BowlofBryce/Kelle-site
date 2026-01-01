@@ -180,6 +180,7 @@ Deno.serve(async (req: Request) => {
             console.log(`Deleted ${staleVariants.length} stale variants for ${productSummary.id}`);
           }
         }
+
       } catch (error) {
         console.error(`Error processing product ${productSummary.id}:`, error);
         // IMPORTANT: Do NOT call publishing_failed / publishing_succeeded here.
