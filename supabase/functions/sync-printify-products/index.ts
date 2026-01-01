@@ -179,7 +179,7 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        // Best-effort acknowledgment to Printify to clear "Publishing" state for custom stores.
+        // Always acknowledge success to clear Printify publishing state for custom stores.
         try {
           await printify.markPublishingSucceeded(productSummary.id);
           await supabase
