@@ -79,14 +79,6 @@ export class PrintifyClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     console.log(`Printify API Request: ${init.method || 'GET'} ${url}`);
-
-  private async fetchWithRetry<T>(
-    endpoint: string,
-    init: RequestInit = {},
-    attempt = 0,
-    maxAttempts = 5
-  ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
       ...init,
       headers: {
@@ -145,6 +137,10 @@ export class PrintifyClient {
       `/shops/${this.shopId}/products/${productId}.json`,
       { method: 'GET' }
     );
+  }
+
+  private logAckResult(productId: string, action: 'succeeded' | 'failed') {
+    console.log(`Printify publishing_${action} acknowledged for product ${productId}`);
   }
 
   parseVariantName(
@@ -217,6 +213,7 @@ export class PrintifyClient {
       `/shops/${this.shopId}/products/${productId}/publishing_succeeded.json`,
       { method: 'POST' }
     );
+    this.logAckResult(productId, 'succeeded');
   }
 
   async markPublishingFailed(productId: string, reason: string) {
@@ -227,5 +224,6 @@ export class PrintifyClient {
         body: JSON.stringify({ reason }),
       }
     );
+    this.logAckResult(productId, 'failed');
   }
 }
