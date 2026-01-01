@@ -29,6 +29,7 @@ export function ProductsTab({ products, onRefresh }: ProductsTabProps) {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [formData, setFormData] = useState<Partial<Product>>({
     name: '',
     description: '',
@@ -64,6 +65,33 @@ export function ProductsTab({ products, onRefresh }: ProductsTabProps) {
       alert('Failed to sync products');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    setPublishing(true);
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/publish-printify-products`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(error.error || 'Failed to publish products');
+      } else {
+        const result = await response.json();
+        alert(`Publish acknowledgements sent. Success: ${result.published}, Failed: ${result.failed}`);
+      }
+    } catch (error) {
+      console.error('Publish error:', error);
+      alert('Failed to publish products');
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -172,6 +200,14 @@ export function ProductsTab({ products, onRefresh }: ProductsTabProps) {
           >
             <RefreshCw className={`w-5 h-5 inline mr-2 ${syncing ? 'animate-spin' : ''}`} />
             Sync from Printify
+          </AnimatedButton>
+          <AnimatedButton
+            variant="secondary"
+            onClick={handlePublish}
+            disabled={publishing}
+          >
+            <Upload className={`w-5 h-5 inline mr-2 ${publishing ? 'animate-spin' : ''}`} />
+            Publish to Printify
           </AnimatedButton>
           <AnimatedButton variant="primary" onClick={handleCreate}>
             <Plus className="w-5 h-5 inline mr-2" />
