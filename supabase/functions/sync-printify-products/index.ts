@@ -190,11 +190,16 @@ Deno.serve(async (req: Request) => {
             })
             .eq('id', upsertedProduct.id);
         } catch (ackErr) {
-          console.warn(`Could not acknowledge publish success for ${productSummary.id}`, ackErr);
+          console.warn(`Could not acknowledge publish ${ackAction ?? 'unknown'} for ${productSummary.id}`, ackErr);
         }
 
       } catch (error) {
         console.error(`Error processing product ${productSummary.title}:`, error);
+        try {
+          await printify.markPublishingFailed(productSummary.id, (error as Error)?.message || 'Sync error');
+        } catch (ackErr) {
+          console.warn(`Could not acknowledge publish failure for ${productSummary.id}`, ackErr);
+        }
         continue;
       }
     }
