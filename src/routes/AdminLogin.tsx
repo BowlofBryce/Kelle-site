@@ -44,7 +44,7 @@ export function AdminLogin() {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#1a1a1a,_#050505)] flex items-center justify-center px-4">
       <motion.div
         className="w-full max-w-md"
         variants={fadeInUp}
