@@ -143,6 +143,9 @@ Deno.serve(async (req: Request) => {
       shipping_address_collection: {
         allowed_countries: ['US', 'CA', 'GB', 'AU'],
       },
+      phone_number_collection: {
+        enabled: true,
+      },
       metadata: {
         cart_items: JSON.stringify(items),
       },
