@@ -211,7 +211,10 @@ export class PrintifyClient {
   async markPublishingSucceeded(productId: string) {
     await this.fetchWithRetry(
       `/shops/${this.shopId}/products/${productId}/publishing_succeeded.json`,
-      { method: 'POST' }
+      {
+        method: 'POST',
+        body: JSON.stringify({}), // ensure Printify sees an explicit body
+      }
     );
     this.logAckResult(productId, 'succeeded');
   }

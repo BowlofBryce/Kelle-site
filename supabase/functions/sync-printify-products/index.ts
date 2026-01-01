@@ -57,114 +57,123 @@ Deno.serve(async (req: Request) => {
         if (!details.images || details.images.length === 0) {
           console.warn(`Product ${productSummary.id} has no images yet; will retry on next sync`);
           pendingImages.push(productSummary.id);
-          continue;
-        }
-
-        const thumbnail = details.images?.[0]?.src || '';
-        const images = details.images?.map(img => img.src) || [];
-
-        const enabledVariants = details.variants.filter(
-          v => v.is_enabled && v.is_available
-        );
-
-        if (enabledVariants.length === 0) {
-          console.log(`No enabled variants, skipping product`);
-          continue;
-        }
-
-        const priceInCents = enabledVariants[0]?.price || 2999;
-
-        const slug = details.title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '');
-
-        const { data: existingProduct } = await supabase
-          .from('products')
-          .select('id, active, featured, publish_state')
-          .eq('printify_id', productSummary.id)
-          .maybeSingle();
-
-        const resolvedActive = existingProduct?.active ?? true;
-        const resolvedFeatured = existingProduct?.featured ?? false;
-        const resolvedPublishState = existingProduct?.publish_state ?? 'published';
-
-        const { data: upsertedProduct, error: upsertError } = await supabase
-          .from('products')
-          .upsert(
-            {
-              printify_id: productSummary.id,
-              printify_shop_id: details.shop_id?.toString?.() || printifyShopId,
-              name: details.title,
-              slug: slug,
-              description: details.description || '',
-              price_cents: priceInCents,
-              thumbnail_url: thumbnail,
-              images: images,
-              active: resolvedActive,
-              featured: resolvedFeatured,
-              publish_state: resolvedPublishState,
-              category: 'merch',
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'printify_id' }
-          )
-          .select()
-          .single();
-
-        if (upsertError || !upsertedProduct) {
-          console.error(`Upsert error:`, upsertError);
-          continue;
-        }
-
-        console.log(`Synced product: ${upsertedProduct.id}`);
-        syncedProducts.push({ id: upsertedProduct.id, printify_id: productSummary.id });
-
-        console.log(`Processing ${enabledVariants.length} enabled variants`);
-
-        const variantsToUpsert = enabledVariants.map(variant => {
-          const previewUrl = printify.getVariantImage(variant, details.images);
-          const { size, color, optionValues } = printify.parseVariantName(variant, details.options);
-
-          return {
-            product_id: upsertedProduct.id,
-            printify_variant_id: variant.id.toString(),
-            name: `${size} / ${color}`,
-            size,
-            color,
-            option_values: optionValues,
-            sku: variant.sku || `${productSummary.id}-${variant.id}`,
-            price_cents: variant.price,
-            available: true,
-            stock: 100,
-            preview_url: previewUrl || thumbnail,
-          };
-        });
-
-        const { error: variantsUpsertError } = await supabase
-          .from('variants')
-          .upsert(variantsToUpsert, { onConflict: 'printify_variant_id' });
-
-        if (variantsUpsertError) {
-          console.error(`Variants upsert error:`, variantsUpsertError);
         } else {
-          console.log(`Synced ${variantsToUpsert.length} variants`);
-        }
+          const thumbnail = details.images?.[0]?.src || '';
+          const images = details.images?.map(img => img.src) || [];
 
-        const syncedVariantIds = enabledVariants.map(v => v.id.toString());
-        const { data: existingVariants } = await supabase
-          .from('variants')
-          .select('id, printify_variant_id')
-          .eq('product_id', upsertedProduct.id);
-
-        if (existingVariants) {
-          const staleVariants = existingVariants.filter(
-            ev => ev.printify_variant_id && !syncedVariantIds.includes(ev.printify_variant_id)
+          const enabledVariants = details.variants.filter(
+            v => v.is_enabled && v.is_available
           );
-          if (staleVariants.length > 0) {
-            const staleIds = staleVariants.map(v => v.id);
-            await supabase.from('variants').delete().in('id', staleIds);
-            console.log(`Deleted ${staleVariants.length} stale variants`);
+
+          if (enabledVariants.length === 0) {
+            console.log(`No enabled variants, skipping product`);
+          } else {
+            const priceInCents = enabledVariants[0]?.price || 2999;
+
+            const slug = details.title
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '');
+
+            const { data: existingProduct } = await supabase
+              .from('products')
+              .select('id, active, featured, publish_state')
+              .eq('printify_id', productSummary.id)
+              .maybeSingle();
+
+            const resolvedActive = existingProduct?.active ?? true;
+            const resolvedFeatured = existingProduct?.featured ?? false;
+            const resolvedPublishState = existingProduct?.publish_state ?? 'published';
+
+            const { data: upsertedProduct, error: upsertError } = await supabase
+              .from('products')
+              .upsert(
+                {
+                  printify_id: productSummary.id,
+                  printify_shop_id: details.shop_id?.toString?.() || printifyShopId,
+                  name: details.title,
+                  slug: slug,
+                  description: details.description || '',
+                  price_cents: priceInCents,
+                  thumbnail_url: thumbnail,
+                  images: images,
+                  active: resolvedActive,
+                  featured: resolvedFeatured,
+                  publish_state: resolvedPublishState,
+                  category: 'merch',
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'printify_id' }
+              )
+              .select()
+              .single();
+
+            if (upsertError || !upsertedProduct) {
+              console.error(`Upsert error:`, upsertError);
+            } else {
+              console.log(`Synced product: ${upsertedProduct.id}`);
+              syncedProducts.push({ id: upsertedProduct.id, printify_id: productSummary.id });
+
+              console.log(`Processing ${enabledVariants.length} enabled variants`);
+
+              const variantsToUpsert = enabledVariants.map(variant => {
+                const previewUrl = printify.getVariantImage(variant, details.images);
+                const { size, color, optionValues } = printify.parseVariantName(variant, details.options);
+
+                return {
+                  product_id: upsertedProduct.id,
+                  printify_variant_id: variant.id.toString(),
+                  name: `${size} / ${color}`,
+                  size,
+                  color,
+                  option_values: optionValues,
+                  sku: variant.sku || `${productSummary.id}-${variant.id}`,
+                  price_cents: variant.price,
+                  available: true,
+                  stock: 100,
+                  preview_url: previewUrl || thumbnail,
+                };
+              });
+
+              const { error: variantsUpsertError } = await supabase
+                .from('variants')
+                .upsert(variantsToUpsert, { onConflict: 'printify_variant_id' });
+
+              if (variantsUpsertError) {
+                console.error(`Variants upsert error:`, variantsUpsertError);
+              } else {
+                console.log(`Synced ${variantsToUpsert.length} variants`);
+              }
+
+              const syncedVariantIds = enabledVariants.map(v => v.id.toString());
+              const { data: existingVariants } = await supabase
+                .from('variants')
+                .select('id, printify_variant_id')
+                .eq('product_id', upsertedProduct.id);
+
+              if (existingVariants) {
+                const staleVariants = existingVariants.filter(
+                  ev => ev.printify_variant_id && !syncedVariantIds.includes(ev.printify_variant_id)
+                );
+                if (staleVariants.length > 0) {
+                  const staleIds = staleVariants.map(v => v.id);
+                  await supabase.from('variants').delete().in('id', staleIds);
+                  console.log(`Deleted ${staleVariants.length} stale variants`);
+                }
+              }
+
+              try {
+                await supabase
+                  .from('products')
+                  .update({
+                    publish_state: 'published',
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', upsertedProduct.id);
+              } catch (publishUpdateError) {
+                console.warn(`Could not update publish_state locally for ${productSummary.id}`, publishUpdateError);
+              }
+            }
           }
         }
 
