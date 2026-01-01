@@ -88,10 +88,22 @@ Deno.serve(async (req: Request) => {
 
       console.log('Found order:', order.id);
 
-      const customerName = session.customer_details?.name || 'Guest';
+      const shippingAddress =
+        session.shipping_details?.address ||
+        session.customer_details?.address ||
+        order.shipping_address ||
+        null;
+      const customerName =
+        session.shipping_details?.name ||
+        session.customer_details?.name ||
+        order.customer_name ||
+        'Guest';
       const customerEmail = session.customer_details?.email || order.email;
-      const customerPhone = session.customer_details?.phone || null;
-      const shippingAddress = session.shipping_details?.address || session.customer_details?.address;
+      const customerPhone =
+        session.customer_details?.phone ||
+        session.shipping_details?.phone ||
+        order.customer_phone ||
+        null;
 
       console.log('Shipping address:', JSON.stringify(shippingAddress));
 
@@ -105,6 +117,15 @@ Deno.serve(async (req: Request) => {
           customer_phone: customerPhone,
           shipping_address: shippingAddress,
           fulfillment_status: 'processing',
+          metadata: {
+            ...(order.metadata || {}),
+            stripe_checkout_session: {
+              id: session.id,
+              customer_details: session.customer_details || null,
+              shipping_details: session.shipping_details || null,
+            },
+            shipping_address_snapshot: shippingAddress,
+          },
         })
         .eq('id', order.id);
 
