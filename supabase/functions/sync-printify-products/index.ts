@@ -39,6 +39,7 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
     const printify = new PrintifyClient(printifyToken, printifyShopId);
+    const debugLog = true;
 
     console.log('Starting Printify product sync...');
     console.log(`Shop ID: ${printifyShopId}`);
@@ -54,6 +55,23 @@ Deno.serve(async (req: Request) => {
         console.log(`Processing: ${productSummary.title} (${productSummary.id})`);
 
         const details = await printify.getProduct(productSummary.id);
+        if (debugLog) {
+          console.log(
+            'Printify product snapshot:',
+            JSON.stringify(
+              {
+                id: details.id,
+                title: details.title,
+                visible: details.visible,
+                is_locked: details.is_locked,
+                blueprint_id: details.blueprint_id,
+                variant_count: details.variants?.length ?? 0,
+              },
+              null,
+              2
+            )
+          );
+        }
 
         if (!details.images || details.images.length === 0) {
           console.warn(`Product ${productSummary.id} has no images yet; will retry on next sync`);
