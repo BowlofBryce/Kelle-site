@@ -19,7 +19,6 @@ Deno.serve(async (req: Request) => {
     const printifyShopId = Deno.env.get('PRINTIFY_SHOP_ID');
     const siteUrl =
       (Deno.env.get('PUBLIC_SITE_URL') || Deno.env.get('SITE_URL') || '').replace(/\/+$/, '');
-    const disablePublishFailureAck = Deno.env.get('PRINTIFY_DISABLE_PUBLISH_FAIL_ACK') === 'true';
 
     if (
       !printifyToken ||
@@ -55,23 +54,11 @@ Deno.serve(async (req: Request) => {
       try {
         console.log(`Processing: ${productSummary.title}`);
 
-        let ackAction: 'succeeded' | 'failed' | 'skip' | null = null;
-        let ackReason: string | undefined;
-
         const details = await printify.getProduct(productSummary.id);
-        const slug = details.title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '');
-        const externalHandle =
-          siteUrl && slug
-            ? `${siteUrl}/product/${slug}`
-            : undefined;
 
         if (!details.images || details.images.length === 0) {
           console.warn(`Product ${productSummary.id} has no images yet; will retry on next sync`);
           pendingImages.push(productSummary.id);
-          ackAction = 'skip'; // avoid publishing_failed on transient asset gaps
         } else {
           const thumbnail = details.images?.[0]?.src || '';
           const images = details.images?.map(img => img.src) || [];
@@ -82,9 +69,13 @@ Deno.serve(async (req: Request) => {
 
           if (enabledVariants.length === 0) {
             console.log(`No enabled variants, skipping product`);
-            ackAction = 'skip'; // these are intentional; don’t fail publish
           } else {
             const priceInCents = enabledVariants[0]?.price || 2999;
+
+            const slug = details.title
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '');
 
             const { data: existingProduct } = await supabase
               .from('products')
@@ -121,8 +112,6 @@ Deno.serve(async (req: Request) => {
 
             if (upsertError || !upsertedProduct) {
               console.error(`Upsert error:`, upsertError);
-              ackAction = 'failed';
-              ackReason = 'Failed to upsert product in Supabase';
             } else {
               console.log(`Synced product: ${upsertedProduct.id}`);
               syncedProducts.push({ id: upsertedProduct.id, printify_id: productSummary.id });
@@ -154,11 +143,8 @@ Deno.serve(async (req: Request) => {
 
               if (variantsUpsertError) {
                 console.error(`Variants upsert error:`, variantsUpsertError);
-                ackAction = 'failed';
-                ackReason = 'Failed to upsert variants in Supabase';
               } else {
                 console.log(`Synced ${variantsToUpsert.length} variants`);
-                ackAction = 'succeeded';
               }
 
               const syncedVariantIds = enabledVariants.map(v => v.id.toString());
@@ -195,17 +181,14 @@ Deno.serve(async (req: Request) => {
 
         // Best-effort acknowledgment to Printify to clear "Publishing" state for custom stores.
         try {
-          if (ackAction === 'succeeded') {
-            await printify.markPublishingSucceeded(productSummary.id, externalHandle);
-          } else if (ackAction === 'failed') {
-            if (!disablePublishFailureAck) {
-              await printify.markPublishingFailed(productSummary.id, ackReason || 'Sync failed');
-            } else {
-              console.warn(`Publish failure ack suppressed for ${productSummary.id}: ${ackReason ?? 'Sync failed'}`);
-            }
-          } else {
-            console.log(`Publish ack skipped for ${productSummary.id} (state: ${ackAction ?? 'none'})`);
-          }
+          await printify.markPublishingSucceeded(productSummary.id);
+          await supabase
+            .from('products')
+            .update({
+              publish_state: 'published',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', upsertedProduct.id);
         } catch (ackErr) {
           console.warn(`Could not acknowledge publish ${ackAction ?? 'unknown'} for ${productSummary.id}`, ackErr);
         }
@@ -213,11 +196,7 @@ Deno.serve(async (req: Request) => {
       } catch (error) {
         console.error(`Error processing product ${productSummary.title}:`, error);
         try {
-          if (!disablePublishFailureAck) {
-            await printify.markPublishingFailed(productSummary.id, (error as Error)?.message || 'Sync error');
-          } else {
-            console.warn(`Publish failure ack suppressed for ${productSummary.id}: ${(error as Error)?.message}`);
-          }
+          await printify.markPublishingFailed(productSummary.id, (error as Error)?.message || 'Sync error');
         } catch (ackErr) {
           console.warn(`Could not acknowledge publish failure for ${productSummary.id}`, ackErr);
         }
