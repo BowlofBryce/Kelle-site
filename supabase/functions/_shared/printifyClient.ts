@@ -79,14 +79,6 @@ export class PrintifyClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     console.log(`Printify API Request: ${init.method || 'GET'} ${url}`);
-
-  private async fetchWithRetry<T>(
-    endpoint: string,
-    init: RequestInit = {},
-    attempt = 0,
-    maxAttempts = 5
-  ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
       ...init,
       headers: {
@@ -145,6 +137,11 @@ export class PrintifyClient {
       `/shops/${this.shopId}/products/${productId}.json`,
       { method: 'GET' }
     );
+  }
+
+  private logAckResult(productId: string, action: 'succeeded' | 'failed', handle?: string) {
+    const handleInfo = handle ? ` (handle: ${handle})` : '';
+    console.log(`Printify publishing_${action} acknowledged for product ${productId}${handleInfo}`);
   }
 
   parseVariantName(
@@ -212,11 +209,18 @@ export class PrintifyClient {
     return variantImage?.src || anyVariantImage?.src || images?.[0]?.src || null;
   }
 
-  async markPublishingSucceeded(productId: string) {
+  async markPublishingSucceeded(productId: string, externalHandle?: string) {
+    const body = externalHandle
+      ? { external: { handle: externalHandle } }
+      : {};
     await this.fetchWithRetry(
       `/shops/${this.shopId}/products/${productId}/publishing_succeeded.json`,
-      { method: 'POST' }
+      {
+        method: 'POST',
+        body: JSON.stringify(body), // ensure Printify sees an explicit body
+      }
     );
+    this.logAckResult(productId, 'succeeded', externalHandle);
   }
 
   async markPublishingFailed(productId: string, reason: string) {
@@ -227,5 +231,6 @@ export class PrintifyClient {
         body: JSON.stringify({ reason }),
       }
     );
+    this.logAckResult(productId, 'failed');
   }
 }
