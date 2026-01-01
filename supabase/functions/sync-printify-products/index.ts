@@ -42,17 +42,16 @@ Deno.serve(async (req: Request) => {
 
     console.log('Starting Printify product sync...');
     console.log(`Shop ID: ${printifyShopId}`);
-    console.log(`API Token configured: ${printifyToken ? 'Yes' : 'No'}`);
 
     const productList = await printify.getProductsPaginated();
-    console.log(`Found ${productList.length} products from Printify (paginated)`);
+    console.log(`Found ${productList.length} products from Printify`);
 
     const syncedProducts: { id: string; printify_id: string }[] = [];
     const pendingImages: string[] = [];
 
     for (const productSummary of productList) {
       try {
-        console.log(`Processing: ${productSummary.title}`);
+        console.log(`Processing: ${productSummary.title} (${productSummary.id})`);
 
         const details = await printify.getProduct(productSummary.id);
 
@@ -204,7 +203,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    console.log(`Sync complete! Processed ${syncedProducts.length} products`);
+    console.log(`Sync complete! Synced ${syncedProducts.length} products`);
 
     return new Response(
       JSON.stringify({
@@ -218,16 +217,11 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
-  } catch (error) {
-    console.error('Error syncing Printify products:', error);
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : 'Failed to sync Printify products',
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+  } catch (e) {
+    console.error('Sync failed:', e);
+    return new Response(JSON.stringify({ error: (e as Error).message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 });
