@@ -48,8 +48,8 @@ function App() {
           <Route path="checkout/cancel" element={<CheckoutCancel />} />
           <Route path="about" element={<About />} />
         </Route>
-        <Route path="backstage" element={<AdminLogin />} />
-        <Route path="backstage/dashboard" element={<AdminDashboard />} />
+        <Route path="/backstage" element={<AdminLogin />} />
+        <Route path="/backstage/dashboard" element={<AdminDashboard />} />
       </Routes>
     </BrowserRouter>
   );
