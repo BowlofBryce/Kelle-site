@@ -55,14 +55,6 @@ Deno.serve(async (req: Request) => {
         console.log(`Processing: ${productSummary.title}`);
 
         const details = await printify.getProduct(productSummary.id);
-        const slug = details.title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '');
-        const externalHandle =
-          siteUrl && slug
-            ? `${siteUrl}/product/${slug}`
-            : undefined;
 
         if (!details.images || details.images.length === 0) {
           console.warn(`Product ${productSummary.id} has no images yet; will retry on next sync`);
@@ -79,6 +71,11 @@ Deno.serve(async (req: Request) => {
             console.log(`No enabled variants, skipping product`);
           } else {
             const priceInCents = enabledVariants[0]?.price || 2999;
+
+            const slug = details.title
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '');
 
             const { data: existingProduct } = await supabase
               .from('products')
@@ -184,7 +181,14 @@ Deno.serve(async (req: Request) => {
 
         // Best-effort acknowledgment to Printify to clear "Publishing" state for custom stores.
         try {
-          await printify.markPublishingSucceeded(productSummary.id, externalHandle);
+          await printify.markPublishingSucceeded(productSummary.id);
+          await supabase
+            .from('products')
+            .update({
+              publish_state: 'published',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', upsertedProduct.id);
         } catch (ackErr) {
           console.warn(`Could not acknowledge publish success for ${productSummary.id}`, ackErr);
         }

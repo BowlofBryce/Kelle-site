@@ -1,3 +1,7 @@
 {
-  "template": "bolt-vite-react-ts"
+  "supabase": {
+    "projectRef": "uxmeorxvovrgwuswvait",
+    "projectUrl": "https://uxmeorxvovrgwuswvait.supabase.co",
+    "anonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV4bWVvcnh2b3ZyZ3d1c3d2YWl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ3ODkwMDEsImV4cCI6MjA4MDM2NTAwMX0.iMaP1P4OxcuSJ7fQ8luxrP2xdhZWidKnpSZHUqhoBR8"
+  }
 }
