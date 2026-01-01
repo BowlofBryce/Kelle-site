@@ -67,10 +67,6 @@ export class PrintifyClient {
     this.shopId = shopId;
   }
 
-  private async fetch<T>(endpoint: string): Promise<T> {
-    return this.fetchWithRetry<T>(endpoint, { method: 'GET' });
-  }
-
   private async fetchWithRetry<T>(
     endpoint: string,
     init: RequestInit = {},
@@ -80,19 +76,12 @@ export class PrintifyClient {
     const url = `${this.baseUrl}${endpoint}`;
     console.log(`Printify API Request: ${init.method || 'GET'} ${url}`);
 
-  private async fetchWithRetry<T>(
-    endpoint: string,
-    init: RequestInit = {},
-    attempt = 0,
-    maxAttempts = 5
-  ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
       ...init,
       headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
-        ...init.headers,
+        ...(init.headers || {}),
       },
     });
 
@@ -101,26 +90,21 @@ export class PrintifyClient {
       return text ? JSON.parse(text) : (undefined as unknown as T);
     }
 
-    const shouldRetry =
-      response.status === 429 ||
-      (response.status >= 500 && response.status < 600);
+    const shouldRetry = response.status === 429 || (response.status >= 500 && response.status < 600);
 
     if (shouldRetry && attempt < maxAttempts - 1) {
       const retryAfter = parseFloat(response.headers.get('Retry-After') || '0');
       const backoff = Math.min(1000 * 2 ** attempt, 8000);
       const jitter = Math.random() * 250;
       const delay = retryAfter > 0 ? retryAfter * 1000 : backoff + jitter;
+
       console.warn(`Printify API retry ${attempt + 1}/${maxAttempts} after ${delay}ms (status ${response.status})`);
       await new Promise(r => setTimeout(r, delay));
       return this.fetchWithRetry<T>(endpoint, init, attempt + 1, maxAttempts);
     }
 
     const errorText = await response.text();
-    console.error(`Printify API Error Details:`);
-    console.error(`  URL: ${url}`);
-    console.error(`  Status: ${response.status} ${response.statusText}`);
-    console.error(`  Response: ${errorText}`);
-    console.error(`  Shop ID: ${this.shopId}`);
+    console.error(`Printify API Error: ${response.status} ${response.statusText} - ${errorText}`);
     throw new Error(`Printify API request failed: ${response.status} ${response.statusText} - ${errorText}`);
   }
 
@@ -141,10 +125,7 @@ export class PrintifyClient {
   }
 
   async getProduct(productId: string): Promise<PrintifyProduct> {
-    return this.fetchWithRetry<PrintifyProduct>(
-      `/shops/${this.shopId}/products/${productId}.json`,
-      { method: 'GET' }
-    );
+    return this.fetchWithRetry<PrintifyProduct>(`/shops/${this.shopId}/products/${productId}.json`, { method: 'GET' });
   }
 
   parseVariantName(
@@ -162,18 +143,12 @@ export class PrintifyClient {
       if (found) optionValues[found.name] = found.title;
     });
 
-    const sizeOpt =
-      options.find(o => o.type === 'size') ??
-      options.find(o => /size/i.test(o.name));
-    const colorOpt =
-      options.find(o => o.type === 'color') ??
-      options.find(o => /color/i.test(o.name));
+    const sizeOpt = options.find(o => o.type === 'size') ?? options.find(o => /size/i.test(o.name));
+    const colorOpt = options.find(o => o.type === 'color') ?? options.find(o => /color/i.test(o.name));
 
-    // Primary resolution: by option lookup map.
-    let size = sizeOpt ? (optionValues[sizeOpt.name] ?? '') : '';
-    let color = colorOpt ? (optionValues[colorOpt.name] ?? '') : '';
+    let size = sizeOpt ? optionValues[sizeOpt.name] ?? '' : '';
+    let color = colorOpt ? optionValues[colorOpt.name] ?? '' : '';
 
-    // Secondary resolution: by positional mapping of variant.options to options[] if sizes are missing.
     if (!size || !color) {
       variant.options.forEach((id, idx) => {
         const opt = options[idx];
@@ -186,7 +161,6 @@ export class PrintifyClient {
       });
     }
 
-    // Final fallback: parse the variant.title if Printify already concatenated it.
     if (!size || !color) {
       const parts = (variant.title || '').split('/').map(p => p.trim()).filter(Boolean);
       if (parts.length === 2) {
@@ -203,19 +177,24 @@ export class PrintifyClient {
   }
 
   getVariantImage(variant: PrintifyVariant, images: PrintifyImage[]): string | null {
-    const variantImage = images.find(img =>
-      Array.isArray(img.variant_ids) && img.variant_ids.includes(variant.id) && img.position === 'front'
+    const variantImageFront = images.find(
+      img => Array.isArray(img.variant_ids) && img.variant_ids.includes(variant.id) && img.position === 'front'
     );
-    const anyVariantImage = images.find(img =>
-      Array.isArray(img.variant_ids) && img.variant_ids.includes(variant.id)
-    );
-    return variantImage?.src || anyVariantImage?.src || images?.[0]?.src || null;
+    const anyVariantImage = images.find(img => Array.isArray(img.variant_ids) && img.variant_ids.includes(variant.id));
+    return variantImageFront?.src || anyVariantImage?.src || images?.[0]?.src || null;
   }
 
-  async markPublishingSucceeded(productId: string) {
+  // Keep these available for true “custom store publish” flows, but DO NOT call them from sync.
+  async markPublishingSucceeded(
+    productId: string,
+    external?: { id?: string; handle?: string }
+  ) {
     await this.fetchWithRetry(
       `/shops/${this.shopId}/products/${productId}/publishing_succeeded.json`,
-      { method: 'POST' }
+      {
+        method: 'POST',
+        body: JSON.stringify(external ? { external } : {}),
+      }
     );
   }
 
