@@ -2,7 +2,6 @@ import { Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { NavBar } from './NavBar';
 import { MySpaceSidebar } from './MySpaceSidebar';
-import { MusicPlayerBar } from './MusicPlayerBar';
 import { Footer } from './Footer';
 
 export function TattooSpaceLayout() {
@@ -27,7 +26,6 @@ export function TattooSpaceLayout() {
         <Footer />
       </div>
 
-      <MusicPlayerBar />
     </div>
   );
 }
