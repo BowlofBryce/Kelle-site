@@ -8,6 +8,7 @@ import { AnimatedButton } from '../components/ui/AnimatedButton';
 import { ProductGrid } from '../components/merch/ProductGrid';
 import { fadeInUp, scaleIn } from '../lib/animations';
 import { organizeVariants, getColorInfo } from '../lib/variantUtils';
+import { parseMarkdown } from '../lib/markdown';
 import type { Database } from '../lib/database.types';
 
 type Product = Database['public']['Tables']['products']['Row'];
@@ -305,7 +306,7 @@ export function ProductDetail() {
 
           <div
             className="prose prose-invert max-w-none text-gray-200"
-            dangerouslySetInnerHTML={{ __html: product.description || '' }}
+            dangerouslySetInnerHTML={{ __html: parseMarkdown(product.description || '') }}
           />
 
           {/* Color Selection */}

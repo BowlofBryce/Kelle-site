@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Plus,
   Edit2,
@@ -26,6 +26,22 @@ interface ProductsTabProps {
 }
 
 export function ProductsTab({ products, onRefresh }: ProductsTabProps) {
+  useEffect(() => {
+    const saveSiteUrl = async () => {
+      try {
+        const currentOrigin = window.location.origin;
+        await supabase
+          .from('site_content')
+          .upsert(
+            { key: 'site_url', value: JSON.stringify(currentOrigin) },
+            { onConflict: 'key' }
+          );
+      } catch (error) {
+        console.warn('Could not save site URL:', error);
+      }
+    };
+    saveSiteUrl();
+  }, []);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -80,20 +96,11 @@ export function ProductsTab({ products, onRefresh }: ProductsTabProps) {
         },
       });
 
-      const result = await response.json();
-
       if (!response.ok) {
-        alert(result.error || 'Failed to publish products');
-        return;
-      }
-
-      if (result.failed > 0 && Array.isArray(result.failures)) {
-        const firstFailure = result.failures[0];
-        alert(
-          `Publish acknowledgements sent. Success: ${result.published}, Failed: ${result.failed}\n` +
-          `First failure: ${firstFailure.printify_id || 'unknown'} -> ${firstFailure.error || 'Unknown error'}`
-        );
+        const error = await response.json();
+        alert(error.error || 'Failed to publish products');
       } else {
+        const result = await response.json();
         alert(`Publish acknowledgements sent. Success: ${result.published}, Failed: ${result.failed}`);
       }
     } catch (error) {

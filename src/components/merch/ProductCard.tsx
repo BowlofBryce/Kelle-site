@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import type { Database } from '../../lib/database.types';
+import { parseMarkdown } from '../../lib/markdown';
 
 type Product = Database['public']['Tables']['products']['Row'];
 
@@ -43,7 +44,10 @@ export function ProductCard({ product }: ProductCardProps) {
 
       <div className="p-4">
         <h3 className="font-bold text-lg text-gray-100 mb-2 line-clamp-2">{product.name}</h3>
-        <p className="text-sm text-gray-400 mb-3 line-clamp-2">{product.description}</p>
+        <p
+          className="text-sm text-gray-400 mb-3 line-clamp-2"
+          dangerouslySetInnerHTML={{ __html: parseMarkdown(product.description || '') }}
+        />
         <div className="flex items-center justify-between">
           <span className="text-2xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
             ${(product.price_cents / 100).toFixed(2)}
